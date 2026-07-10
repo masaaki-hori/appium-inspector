@@ -3,18 +3,15 @@ import {Fragment, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
 import {GESTURE_ITEM_STYLES, POINTER_TYPES} from '../../../constants/gestures.js';
-import {
-  DEFAULT_SWIPE,
-  DEFAULT_TAP,
-  SCREENSHOT_INTERACTION_MODE,
-} from '../../../constants/screenshot.js';
+import {DEFAULT_SWIPE, SCREENSHOT_INTERACTION_MODE} from '../../../constants/screenshot.js';
 import {INSPECTOR_TABS} from '../../../constants/session-inspector.js';
+import {findElementAtPoint, getElementDisplayName} from '../../../utils/element-hit-testing.js';
 import inspectorStyles from '../SessionInspector.module.css';
 import HighlighterRects from './HighlighterRects.jsx';
 import styles from './Screenshot.module.css';
 
 const {POINTER_UP, POINTER_DOWN, PAUSE, POINTER_MOVE} = POINTER_TYPES;
-const {TAP, SELECT, SWIPE, TAP_SWIPE} = SCREENSHOT_INTERACTION_MODE;
+const {SELECT, SWIPE, TAP_SWIPE} = SCREENSHOT_INTERACTION_MODE;
 
 /**
  * Shows screenshot of running application and divs that highlight the elements' bounding boxes
@@ -33,11 +30,14 @@ const Screenshot = (props) => {
     selectedTick,
     selectedInspectorTab,
     applyClientMethod,
+    sourceJSON,
+    tapAtCoordinates,
   } = props;
   const {t} = useTranslation();
 
   const [x, setX] = useState();
   const [y, setY] = useState();
+  const [hoveredElement, setHoveredElement] = useState();
 
   const handleScreenshotClick = async () => {
     const {tapTickCoordinates} = props;
@@ -58,29 +58,15 @@ const Screenshot = (props) => {
     if (screenshotInteractionMode === TAP_SWIPE) {
       await setCoordEnd(x, y);
       if (Math.abs(coordStart.x - x) < 5 && Math.abs(coordStart.y - y) < 5) {
-        await handleDoTap({x, y}); // Pass coordEnd because otherwise it is not retrieved
+        // Pass coordEnd because otherwise it is not retrieved.
+        // Prefer tapping the element under the point (if any) over raw coordinates,
+        // so recorded/generated code refers to an element rather than a pixel location
+        await tapAtCoordinates(x, y);
       } else {
         await handleDoSwipe({x, y}); // Pass coordEnd because otherwise it is not retrieved
       }
       await clearCoordAction();
     }
-  };
-
-  const handleDoTap = async (tapLocal) => {
-    const {POINTER_NAME, DURATION_1, DURATION_2, BUTTON} = DEFAULT_TAP;
-    await applyClientMethod({
-      methodName: TAP,
-      args: [
-        {
-          [POINTER_NAME]: [
-            {type: POINTER_MOVE, duration: DURATION_1, x: tapLocal.x, y: tapLocal.y},
-            {type: POINTER_DOWN, button: BUTTON},
-            {type: PAUSE, duration: DURATION_2},
-            {type: POINTER_UP, button: BUTTON},
-          ],
-        },
-      ],
-    });
   };
 
   const handleDoSwipe = async (swipeEndLocal) => {
@@ -108,16 +94,20 @@ const Screenshot = (props) => {
     if (screenshotInteractionMode !== SELECT) {
       const offsetX = e.nativeEvent.offsetX;
       const offsetY = e.nativeEvent.offsetY;
-      const newX = offsetX * scaleRatio;
-      const newY = offsetY * scaleRatio;
-      setX(Math.round(newX));
-      setY(Math.round(newY));
+      const newX = Math.round(offsetX * scaleRatio);
+      const newY = Math.round(offsetY * scaleRatio);
+      setX(newX);
+      setY(newY);
+      setHoveredElement(
+        screenshotInteractionMode === TAP_SWIPE ? findElementAtPoint(sourceJSON, newX, newY) : null,
+      );
     }
   };
 
   const handleScreenshotLeave = async () => {
     setX(null);
     setY(null);
+    setHoveredElement(null);
     await clearCoordAction();
   };
 
@@ -188,8 +178,14 @@ const Screenshot = (props) => {
         >
           {screenshotInteractionMode !== SELECT && (
             <div className={styles.coordinatesContainer}>
-              <p>{t('xCoordinate', {x})}</p>
-              <p>{t('yCoordinate', {y})}</p>
+              {hoveredElement ? (
+                <p>{t('elementAtCoordinates', {element: getElementDisplayName(hoveredElement)})}</p>
+              ) : (
+                <>
+                  <p>{t('xCoordinate', {x})}</p>
+                  <p>{t('yCoordinate', {y})}</p>
+                </>
+              )}
             </div>
           )}
           <img src={screenSrc} id="screenshot" />

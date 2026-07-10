@@ -2,11 +2,15 @@ import _ from 'lodash';
 import sanitize from 'sanitize-filename';
 
 import {SAVED_CLIENT_FRAMEWORK, SET_SAVED_GESTURES} from '../../shared/setting-defs.js';
+import {DRIVERS} from '../constants/common.js';
+import {POINTER_TYPES} from '../constants/gestures.js';
+import {DEFAULT_TAP, SCREENSHOT_INTERACTION_MODE} from '../constants/screenshot.js';
 import {APP_MODE, NATIVE_APP, UNKNOWN_ERROR} from '../constants/session-inspector.js';
 import i18n from '../i18next.js';
 import InspectorDriver from '../lib/appium/inspector-driver.js';
 import {CLIENT_FRAMEWORK_MAP} from '../lib/client-frameworks/map.js';
 import {getSetting, setSetting} from '../polyfills.js';
+import {findElementAtPoint} from '../utils/element-hit-testing.js';
 import {downloadFile, readTextFromUploadedFiles} from '../utils/file-handling.js';
 import {parseGestureFileContents} from '../utils/gesturefile-parsing.js';
 import {getSuggestedLocators} from '../utils/locator-generation/common.js';
@@ -48,6 +52,7 @@ export const PAUSE_RECORDING = 'PAUSE_RECORDING';
 export const CLEAR_RECORDING = 'CLEAR_RECORDING';
 export const SET_CLIENT_FRAMEWORK = 'SET_CLIENT_FRAMEWORK';
 export const RECORD_ACTION = 'RECORD_ACTION';
+export const RECORD_FLUTTER_FINDER = 'RECORD_FLUTTER_FINDER';
 export const SET_SHOW_BOILERPLATE = 'SET_SHOW_BOILERPLATE';
 
 export const SHOW_LOCATOR_TEST_MODAL = 'SHOW_LOCATOR_TEST_MODAL';
@@ -252,6 +257,46 @@ export function applyClientMethod(params) {
     }
     window.dispatchEvent(new Event('resize'));
     return commandRes;
+  };
+}
+
+/**
+ * Taps the screenshot at the given point.
+ *
+ * For a Flutter driver session, the widget under the point is resolved server-side (see the
+ * 'appium-handler' Dart package this pairs with) as part of performing the tap itself, so the
+ * coordinate-based tap is always sent, and the response is used to tag the recorded action with
+ * the widget locator the driver resolved (see 'tapFlutterWidgetAtCoordinates').
+ *
+ * For other drivers, the point is looked up against the already-known element bounds first: if
+ * it falls within a known element, that element is located and clicked (so the recorder/generated
+ * code refers to it by locator, not by raw coordinates). Otherwise, falls back to a coordinate-
+ * based tap, same as for Flutter.
+ */
+export function tapAtCoordinates(x, y) {
+  return async (dispatch, getState) => {
+    const {automationName} = getState().inspector;
+    if (automationName === DRIVERS.FLUTTER) {
+      return await tapFlutterWidgetAtCoordinates(x, y)(dispatch, getState);
+    }
+
+    const {sourceJSON, sourceXML, currentContext} = getState().inspector;
+    const isNative = currentContext === NATIVE_APP;
+    const targetElement = findElementAtPoint(sourceJSON, x, y);
+
+    if (targetElement) {
+      const strategyMap = getSuggestedLocators(targetElement, sourceXML, isNative, automationName);
+      for (const [strategy, selector] of strategyMap) {
+        const findAction = callClientMethod({strategy, selector});
+        const {elementId} = await findAction(dispatch, getState);
+        if (elementId) {
+          const clickAction = applyClientMethod({methodName: 'elementClick', elementId});
+          return await clickAction(dispatch, getState);
+        }
+      }
+    }
+
+    return await tapRawCoordinates(x, y)(dispatch, getState);
   };
 }
 
@@ -1088,6 +1133,73 @@ export function toggleAutoSessionRestart() {
     const autoSessionRestart = !getState().inspector.autoSessionRestart;
     dispatch({type: SET_AUTO_SESSION_RESTART, autoSessionRestart});
   };
+}
+
+/**
+ * Sends a coordinate-based tap ('performActions' with a pointerMove/Down/Pause/Up sequence),
+ * without attempting to resolve which element it landed on beforehand.
+ */
+function tapRawCoordinates(x, y) {
+  return async (dispatch, getState) => {
+    const {POINTER_NAME, DURATION_1, DURATION_2, BUTTON} = DEFAULT_TAP;
+    const {POINTER_UP, POINTER_DOWN, PAUSE, POINTER_MOVE} = POINTER_TYPES;
+    const tapAction = applyClientMethod({
+      methodName: SCREENSHOT_INTERACTION_MODE.TAP,
+      args: [
+        {
+          [POINTER_NAME]: [
+            {type: POINTER_MOVE, duration: DURATION_1, x, y},
+            {type: POINTER_DOWN, button: BUTTON},
+            {type: PAUSE, duration: DURATION_2},
+            {type: POINTER_UP, button: BUTTON},
+          ],
+        },
+      ],
+    });
+    return await tapAction(dispatch, getState);
+  };
+}
+
+/**
+ * Taps at the given coordinates against a Flutter driver session. The Dart-side handler (see the
+ * 'appium-handler' Flutter package) resolves the widget under the point itself as part of
+ * handling the tap, and returns which locator it used ('foundBy'/'value', following the
+ * ByTooltipMessage/BySemanticsLabel/ByValueKey/ByText/ByType priority order used by
+ * 'appium_handler.dart#_execCommandWithFinder'). That locator is attached to the just-recorded
+ * action so Flutter-aware code generators (see 'lib/client-frameworks/dart-*.js') can emit a
+ * widget-based 'find.byXxx(...)' expression instead of raw coordinates.
+ */
+function tapFlutterWidgetAtCoordinates(x, y) {
+  return async (dispatch, getState) => {
+    const wasRecording = getState().inspector.isRecording;
+    const commandRes = await tapRawCoordinates(x, y)(dispatch, getState);
+
+    if (wasRecording) {
+      const flutterFinder = parseFlutterFinderFromTapResponse(commandRes);
+      if (flutterFinder) {
+        dispatch({type: RECORD_FLUTTER_FINDER, flutterFinder});
+      }
+    }
+
+    return commandRes;
+  };
+}
+
+/**
+ * Parses the '{text, elementId, type, foundBy, value}' JSON that 'appium_handler.dart's
+ * 'performActions' handler returns after resolving/performing a tap, out of the raw driver
+ * response for the 'performActions' command.
+ *
+ * @returns {{foundBy: string, value: string}|null} null if the response wasn't in the expected
+ * shape (e.g. not a Flutter session using this driver/handler pairing, or no widget was resolved)
+ */
+function parseFlutterFinderFromTapResponse(commandRes) {
+  try {
+    const {foundBy, value} = JSON.parse(commandRes.response.message);
+    return foundBy && value ? {foundBy, value} : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseAndValidateGestureFileString(gestureFileString) {

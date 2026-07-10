@@ -72,4 +72,6 @@ export const CLIENT_FRAMEWORKS = {
   PYTHON: 'python',
   ROBOT: 'robot',
   RUBY: 'ruby',
+  DART_INTEGRATION_TEST: 'dartIntegrationTest',
+  DART_PATROL: 'dartPatrol',
 };

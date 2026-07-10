@@ -141,6 +141,7 @@
   "elementsCount": "Elements found:",
   "xCoordinate": "X: {{x}}",
   "yCoordinate": "Y: {{y}}",
+  "elementAtCoordinates": "Element: {{element}}",
   "SauceLabs Data Center": "SauceLabs Data Center",
   "US-West": "US West 1",
   "US-East": "US East 4",

@@ -30,6 +30,7 @@ import {
   QUIT_SESSION_DONE,
   QUIT_SESSION_REQUESTED,
   RECORD_ACTION,
+  RECORD_FLUTTER_FINDER,
   REMOVE_LOADED_GESTURE,
   SEARCHING_FOR_ELEMENTS,
   SEARCHING_FOR_ELEMENTS_COMPLETED,
@@ -271,6 +272,22 @@ export default function inspector(state = INITIAL_STATE, action) {
         ...state,
         recordedActions: [...state.recordedActions, {action: action.action, params: action.params}],
       };
+
+    case RECORD_FLUTTER_FINDER: {
+      const lastIndex = state.recordedActions.length - 1;
+      if (lastIndex < 0) {
+        return state;
+      }
+      const recordedActions = [...state.recordedActions];
+      recordedActions[lastIndex] = {
+        ...recordedActions[lastIndex],
+        params: [...recordedActions[lastIndex].params, action.flutterFinder],
+      };
+      return {
+        ...state,
+        recordedActions,
+      };
+    }
 
     case ADD_ASSIGNED_VAR_CACHE:
       return {

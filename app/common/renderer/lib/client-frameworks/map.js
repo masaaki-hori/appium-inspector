@@ -1,6 +1,8 @@
 import {registerLanguage} from 'react-refractor';
 
 import {CLIENT_FRAMEWORKS} from '../../constants/session-inspector.js';
+import DartIntegrationTestFramework from './dart-integration-test.js';
+import DartPatrolFramework from './dart-patrol.js';
 import DotNetNUnitFramework from './dotnet-nunit.js';
 import JavaJUnit4Framework from './java-junit4.js';
 import JavaJUnit5Framework from './java-junit5.js';
@@ -19,6 +21,8 @@ export const CLIENT_FRAMEWORK_MAP = {
   [CLIENT_FRAMEWORKS.PYTHON]: PythonFramework,
   [CLIENT_FRAMEWORKS.ROBOT]: RobotFramework,
   [CLIENT_FRAMEWORKS.RUBY]: RubyFramework,
+  [CLIENT_FRAMEWORKS.DART_INTEGRATION_TEST]: DartIntegrationTestFramework,
+  [CLIENT_FRAMEWORKS.DART_PATROL]: DartPatrolFramework,
 };
 
 for (const framework of Object.values(CLIENT_FRAMEWORK_MAP)) {
