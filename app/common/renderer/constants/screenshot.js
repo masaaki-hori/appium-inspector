@@ -1,12 +1,19 @@
 // Screenshot interaction modes
 // TAP_SWIPE refers to both TAP and SWIPE
 // GESTURE refers to playback via gesture editor
+// CHECK_EXISTENCE, ENTER_TEXT and CHECK_TEXT are Flutter-only actions (right-click, in
+// TAP_SWIPE mode) - see 'appium_handler.dart's 'checkExistence'/'enterText'/'checkText'
+// performActions handling. Their values also double as the performActions action 'type' sent to
+// that Dart-side handler
 export const SCREENSHOT_INTERACTION_MODE = {
   SELECT: 'select',
   SWIPE: 'swipe',
   TAP: 'tap',
   TAP_SWIPE: 'tap_swipe',
   GESTURE: 'gesture',
+  CHECK_EXISTENCE: 'checkExistence',
+  ENTER_TEXT: 'enterText',
+  CHECK_TEXT: 'checkText',
 };
 
 // Default parameters when executing coordinate-based swipe over app screenshot

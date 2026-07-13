@@ -1,7 +1,8 @@
-import {Spin} from 'antd';
+import {Dropdown, Input, Modal, Spin} from 'antd';
 import {Fragment, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
+import {DRIVERS} from '../../../constants/common.js';
 import {GESTURE_ITEM_STYLES, POINTER_TYPES} from '../../../constants/gestures.js';
 import {DEFAULT_SWIPE, SCREENSHOT_INTERACTION_MODE} from '../../../constants/screenshot.js';
 import {INSPECTOR_TABS} from '../../../constants/session-inspector.js';
@@ -32,12 +33,32 @@ const Screenshot = (props) => {
     applyClientMethod,
     sourceJSON,
     tapAtCoordinates,
+    automationName,
+    verifyElementExistsAtCoordinates,
+    enterTextAtCoordinates,
+    checkTextAtCoordinates,
   } = props;
   const {t} = useTranslation();
 
   const [x, setX] = useState();
   const [y, setY] = useState();
   const [hoveredElement, setHoveredElement] = useState();
+  const [enterTextModalOpen, setEnterTextModalOpen] = useState(false);
+  const [enterTextValue, setEnterTextValue] = useState('');
+  const [checkTextModalOpen, setCheckTextModalOpen] = useState(false);
+  const [checkTextValue, setCheckTextValue] = useState('');
+
+  const handleEnterTextOk = async () => {
+    setEnterTextModalOpen(false);
+    await enterTextAtCoordinates(x, y, enterTextValue);
+    setEnterTextValue('');
+  };
+
+  const handleCheckTextOk = async () => {
+    setCheckTextModalOpen(false);
+    await checkTextAtCoordinates(x, y, checkTextValue);
+    setCheckTextValue('');
+  };
 
   const handleScreenshotClick = async () => {
     const {tapTickCoordinates} = props;
@@ -161,92 +182,155 @@ const Screenshot = (props) => {
     : `data:image/gif;base64,${screenshot}`;
   const points = getGestureCoordinates();
 
+  // The right-click menu (Flutter driver sessions only) is only meaningful while tracking a
+  // tap/swipe coordinate, since its actions rely on the same 'x'/'y' state
+  const canUseFlutterContextMenu =
+    automationName === DRIVERS.FLUTTER && screenshotInteractionMode === TAP_SWIPE;
+  const flutterContextMenu = {
+    items: [
+      {
+        key: 'verifyElementExists',
+        label: t('verifyElementExists'),
+        onClick: () => verifyElementExistsAtCoordinates(x, y, true),
+      },
+      {
+        key: 'verifyElementDoesNotExist',
+        label: t('verifyElementDoesNotExist'),
+        onClick: () => verifyElementExistsAtCoordinates(x, y, false),
+      },
+      {
+        key: 'enterText',
+        label: t('enterTextMenuItem'),
+        onClick: () => setEnterTextModalOpen(true),
+      },
+      {
+        key: 'checkText',
+        label: t('checkTextMenuItem'),
+        onClick: () => setCheckTextModalOpen(true),
+      },
+    ],
+  };
+
   // Show the screenshot and highlighter rects.
   // Show loading indicator if a method call is in progress, unless using MJPEG mode.
   return (
     <Spin size="large" spinning={!!methodCallInProgress && !isUsingMjpegMode}>
       <div className={styles.innerScreenshotContainer}>
-        <div
-          style={screenshotStyle}
-          onMouseDown={handleScreenshotDown}
-          onMouseUp={handleScreenshotUp}
-          onMouseMove={handleScreenshotCoordsUpdate}
-          onMouseOver={handleScreenshotCoordsUpdate}
-          onMouseLeave={handleScreenshotLeave}
-          onClick={handleScreenshotClick}
-          className={inspectorStyles.screenshotBox}
+        <Dropdown
+          menu={flutterContextMenu}
+          trigger={['contextMenu']}
+          disabled={!canUseFlutterContextMenu}
         >
-          {screenshotInteractionMode !== SELECT && (
-            <div className={styles.coordinatesContainer}>
-              {hoveredElement ? (
-                <p>{t('elementAtCoordinates', {element: getElementDisplayName(hoveredElement)})}</p>
-              ) : (
-                <>
-                  <p>{t('xCoordinate', {x})}</p>
-                  <p>{t('yCoordinate', {y})}</p>
-                </>
-              )}
-            </div>
-          )}
-          <img src={screenSrc} id="screenshot" />
-          {screenshotInteractionMode === SELECT && <HighlighterRects {...props} />}
-          {screenshotInteractionMode === TAP_SWIPE && (
-            <svg className={styles.swipeSvg}>
-              {coordStart && (
-                <circle cx={coordStart.x / scaleRatio} cy={coordStart.y / scaleRatio} r={10} />
-              )}
-              {coordStart && !coordEnd && (
-                <line
-                  x1={coordStart.x / scaleRatio}
-                  y1={coordStart.y / scaleRatio}
-                  x2={x / scaleRatio}
-                  y2={y / scaleRatio}
-                />
-              )}
-              {coordStart && coordEnd && (
-                <line
-                  x1={coordStart.x / scaleRatio}
-                  y1={coordStart.y / scaleRatio}
-                  x2={coordEnd.x / scaleRatio}
-                  y2={coordEnd.y / scaleRatio}
-                />
-              )}
-            </svg>
-          )}
-          {selectedInspectorTab === INSPECTOR_TABS.GESTURES && points && (
-            <svg key="gestureSVG" className={styles.gestureSvg}>
-              {points.map((pointer) =>
-                pointer.map((tick, index) => (
-                  <Fragment key={tick.id}>
-                    {index > 0 && (
-                      <line
-                        className={styles[tick.type]}
-                        key={`${tick.id}.line`}
-                        x1={pointer[index - 1].x / scaleRatio}
-                        y1={pointer[index - 1].y / scaleRatio}
-                        x2={tick.x / scaleRatio}
-                        y2={tick.y / scaleRatio}
-                        style={{stroke: tick.color}}
+          <div
+            style={screenshotStyle}
+            onMouseDown={handleScreenshotDown}
+            onMouseUp={handleScreenshotUp}
+            onMouseMove={handleScreenshotCoordsUpdate}
+            onMouseOver={handleScreenshotCoordsUpdate}
+            onMouseLeave={handleScreenshotLeave}
+            onClick={handleScreenshotClick}
+            className={inspectorStyles.screenshotBox}
+          >
+            {screenshotInteractionMode !== SELECT && (
+              <div className={styles.coordinatesContainer}>
+                {hoveredElement ? (
+                  <p>
+                    {t('elementAtCoordinates', {element: getElementDisplayName(hoveredElement)})}
+                  </p>
+                ) : (
+                  <>
+                    <p>{t('xCoordinate', {x})}</p>
+                    <p>{t('yCoordinate', {y})}</p>
+                  </>
+                )}
+              </div>
+            )}
+            <img src={screenSrc} id="screenshot" />
+            {screenshotInteractionMode === SELECT && <HighlighterRects {...props} />}
+            {screenshotInteractionMode === TAP_SWIPE && (
+              <svg className={styles.swipeSvg}>
+                {coordStart && (
+                  <circle cx={coordStart.x / scaleRatio} cy={coordStart.y / scaleRatio} r={10} />
+                )}
+                {coordStart && !coordEnd && (
+                  <line
+                    x1={coordStart.x / scaleRatio}
+                    y1={coordStart.y / scaleRatio}
+                    x2={x / scaleRatio}
+                    y2={y / scaleRatio}
+                  />
+                )}
+                {coordStart && coordEnd && (
+                  <line
+                    x1={coordStart.x / scaleRatio}
+                    y1={coordStart.y / scaleRatio}
+                    x2={coordEnd.x / scaleRatio}
+                    y2={coordEnd.y / scaleRatio}
+                  />
+                )}
+              </svg>
+            )}
+            {selectedInspectorTab === INSPECTOR_TABS.GESTURES && points && (
+              <svg key="gestureSVG" className={styles.gestureSvg}>
+                {points.map((pointer) =>
+                  pointer.map((tick, index) => (
+                    <Fragment key={tick.id}>
+                      {index > 0 && (
+                        <line
+                          className={styles[tick.type]}
+                          key={`${tick.id}.line`}
+                          x1={pointer[index - 1].x / scaleRatio}
+                          y1={pointer[index - 1].y / scaleRatio}
+                          x2={tick.x / scaleRatio}
+                          y2={tick.y / scaleRatio}
+                          style={{stroke: tick.color}}
+                        />
+                      )}
+                      <circle
+                        className={styles[`${tick.type}Circle`]}
+                        key={`${tick.id}.circle`}
+                        cx={tick.x / scaleRatio}
+                        cy={tick.y / scaleRatio}
+                        r={8}
+                        style={
+                          tick.type === GESTURE_ITEM_STYLES.FILLED
+                            ? {fill: tick.color}
+                            : {stroke: tick.color}
+                        }
                       />
-                    )}
-                    <circle
-                      className={styles[`${tick.type}Circle`]}
-                      key={`${tick.id}.circle`}
-                      cx={tick.x / scaleRatio}
-                      cy={tick.y / scaleRatio}
-                      r={8}
-                      style={
-                        tick.type === GESTURE_ITEM_STYLES.FILLED
-                          ? {fill: tick.color}
-                          : {stroke: tick.color}
-                      }
-                    />
-                  </Fragment>
-                )),
-              )}
-            </svg>
-          )}
-        </div>
+                    </Fragment>
+                  )),
+                )}
+              </svg>
+            )}
+          </div>
+        </Dropdown>
+        <Modal
+          title={t('enterTextModalTitle')}
+          open={enterTextModalOpen}
+          onOk={handleEnterTextOk}
+          onCancel={() => setEnterTextModalOpen(false)}
+        >
+          <Input
+            placeholder={t('enterTextInputPlaceholder')}
+            value={enterTextValue}
+            onChange={(e) => setEnterTextValue(e.target.value)}
+            onPressEnter={handleEnterTextOk}
+          />
+        </Modal>
+        <Modal
+          title={t('checkTextModalTitle')}
+          open={checkTextModalOpen}
+          onOk={handleCheckTextOk}
+          onCancel={() => setCheckTextModalOpen(false)}
+        >
+          <Input
+            placeholder={t('checkTextInputPlaceholder')}
+            value={checkTextValue}
+            onChange={(e) => setCheckTextValue(e.target.value)}
+            onPressEnter={handleCheckTextOk}
+          />
+        </Modal>
       </div>
     </Spin>
   );

@@ -7,6 +7,13 @@ const TAP_POINTER_ACTIONS = {
   finger1: [{type: 'pointerMove', duration: 0, x: 42, y: 84}],
 };
 
+const ENTER_TEXT_POINTER_ACTIONS = {
+  finger1: [
+    {type: 'pointerMove', duration: 0, x: 42, y: 84},
+    {type: 'enterText', text: 'hello@example.com'},
+  ],
+};
+
 describe('lib/client-frameworks/dart-*.js', function () {
   for (const [name, FrameworkClass] of [
     ['DartIntegrationTestFramework', DartIntegrationTestFramework],
@@ -47,6 +54,110 @@ describe('lib/client-frameworks/dart-*.js', function () {
         expect(code).toContain(
           "Code generation for action 'installApp' is not currently supported",
         );
+      });
+
+      it('should render a findsOneWidget assertion when a widget should exist', function () {
+        const framework = new FrameworkClass();
+        framework.actions = [
+          {
+            action: 'checkExistence',
+            params: [
+              undefined,
+              undefined,
+              TAP_POINTER_ACTIONS,
+              {foundBy: 'byText', value: 'Login Success', shouldExist: true},
+            ],
+          },
+        ];
+        const code = framework.getCodeString();
+        expect(code).toContain('expect(find.text("Login Success"), findsOneWidget);');
+      });
+
+      it('should render a findsNothing assertion when a widget should not exist', function () {
+        const framework = new FrameworkClass();
+        framework.actions = [
+          {
+            action: 'checkExistence',
+            params: [
+              undefined,
+              undefined,
+              TAP_POINTER_ACTIONS,
+              {foundBy: 'byText', value: 'Error', shouldExist: false},
+            ],
+          },
+        ];
+        const code = framework.getCodeString();
+        expect(code).toContain('expect(find.text("Error"), findsNothing);');
+      });
+
+      it('should comment out an existence check when no Flutter finder was resolved', function () {
+        const framework = new FrameworkClass();
+        framework.actions = [
+          {action: 'checkExistence', params: [undefined, undefined, TAP_POINTER_ACTIONS]},
+        ];
+        const code = framework.getCodeString();
+        expect(code).toContain(
+          'Could not resolve a widget to verify the existence of at this position',
+        );
+        expect(code).not.toContain('expect(');
+      });
+
+      it('should enter text into the resolved widget when a Flutter finder was resolved', function () {
+        const framework = new FrameworkClass();
+        framework.actions = [
+          {
+            action: 'enterText',
+            params: [
+              undefined,
+              undefined,
+              ENTER_TEXT_POINTER_ACTIONS,
+              {foundBy: 'byValueKey', value: 'email-field'},
+            ],
+          },
+        ];
+        const code = framework.getCodeString();
+        expect(code).toContain('find.byKey(const Key("email-field"))');
+        expect(code).toContain('enterText');
+        expect(code).toContain('"hello@example.com"');
+      });
+
+      it('should comment out entering text when no Flutter finder was resolved', function () {
+        const framework = new FrameworkClass();
+        framework.actions = [
+          {action: 'enterText', params: [undefined, undefined, ENTER_TEXT_POINTER_ACTIONS]},
+        ];
+        const code = framework.getCodeString();
+        expect(code).toContain('Could not resolve a widget to enter text into at this position');
+        expect(code).not.toContain('enterText(');
+      });
+
+      it('should render a text-content assertion for a recorded checkText action', function () {
+        const framework = new FrameworkClass();
+        framework.actions = [
+          {
+            action: 'checkText',
+            params: [
+              undefined,
+              undefined,
+              TAP_POINTER_ACTIONS,
+              {foundBy: 'byText', value: 'YES', shouldExist: true},
+            ],
+          },
+        ];
+        const code = framework.getCodeString();
+        expect(code).toContain('expect(find.text("YES"), findsOneWidget);');
+      });
+
+      it('should comment out a checkText action when no Flutter finder was resolved', function () {
+        const framework = new FrameworkClass();
+        framework.actions = [
+          {action: 'checkText', params: [undefined, undefined, TAP_POINTER_ACTIONS]},
+        ];
+        const code = framework.getCodeString();
+        expect(code).toContain(
+          'Could not resolve a widget to verify the existence of at this position',
+        );
+        expect(code).not.toContain('expect(');
       });
     });
   }

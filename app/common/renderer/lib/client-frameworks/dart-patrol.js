@@ -42,4 +42,13 @@ await $.pumpAndSettle();`;
     return `await $.tester.dragFrom(Offset(${x1}, ${y1}), Offset(${x2 - x1}, ${y2 - y1}));
 await $.pumpAndSettle();`;
   }
+
+  codeFor_enterText(varNameIgnore, varIndexIgnore, pointerActions, flutterFinder) {
+    const finderExpr = flutterFinder && this.getFlutterFinderExpression(flutterFinder);
+    if (!finderExpr) {
+      return this.addComment('Could not resolve a widget to enter text into at this position');
+    }
+    const text = this.getEnterTextFromPointerActions(pointerActions);
+    return `await $(${finderExpr}).enterText(${JSON.stringify(text)});`;
+  }
 }

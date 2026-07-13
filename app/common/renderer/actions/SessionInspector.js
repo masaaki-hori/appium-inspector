@@ -1136,6 +1136,168 @@ export function toggleAutoSessionRestart() {
 }
 
 /**
+ * Checks (read-only, no interaction with the app) whether a widget exists at the given point of
+ * a Flutter driver session, using 'appium_handler.dart's 'checkExistence' performActions
+ * handling - same finder-resolution mechanism as a tap, but without actually tapping.
+ *
+ * A local bounds hit-test (see 'findElementAtPoint') is checked first, to avoid sending a check
+ * for a point appium_handler.dart has no widget for at all - as of this writing, its Dart-side
+ * handling of that case is a non-null assertion on the hit-test result, which throws (crashing
+ * the check, though not the app-under-test) rather than reporting "not found".
+ *
+ * If recording, the resolved locator is attached to the just-recorded action (see
+ * 'RECORD_FLUTTER_FINDER') together with 'shouldExist', so Flutter-aware code generators (see
+ * 'lib/client-frameworks/dart-*.js') can emit an 'expect(find...., findsOneWidget/findsNothing)'
+ * assertion - evaluated when the *generated* test runs, not right now: finding a widget here only
+ * means there's currently something to build a locator from, not that the check passed or failed.
+ *
+ * @param {boolean} shouldExist whether the generated assertion should expect the widget found at
+ * (x, y) right now to still be present ('findsOneWidget'), or absent ('findsNothing'), when the
+ * generated test runs
+ */
+export function verifyElementExistsAtCoordinates(x, y, shouldExist) {
+  return async (dispatch, getState) => {
+    const {sourceJSON, isRecording} = getState().inspector;
+    if (!findElementAtPoint(sourceJSON, x, y)) {
+      notification.error({title: i18n.t('noElementFoundAtPosition')});
+      return;
+    }
+
+    const {POINTER_NAME, DURATION_1} = DEFAULT_TAP;
+    const checkAction = applyClientMethod({
+      methodName: SCREENSHOT_INTERACTION_MODE.CHECK_EXISTENCE,
+      args: [
+        {
+          [POINTER_NAME]: [
+            {type: POINTER_TYPES.POINTER_MOVE, duration: DURATION_1, x, y},
+            {type: SCREENSHOT_INTERACTION_MODE.CHECK_EXISTENCE, text: ''},
+          ],
+        },
+      ],
+    });
+    const commandRes = await checkAction(dispatch, getState);
+    const flutterFinder = parseFlutterFinderFromResponse(commandRes);
+
+    if (!flutterFinder) {
+      notification.error({title: i18n.t('couldNotResolveElementLocator')});
+      return;
+    }
+
+    notification.success({
+      title: i18n.t('existenceCheckFoundElement', flutterFinder),
+    });
+
+    if (isRecording) {
+      dispatch({type: RECORD_FLUTTER_FINDER, flutterFinder: {...flutterFinder, shouldExist}});
+    }
+  };
+}
+
+/**
+ * Enters text into the widget at the given point of a Flutter driver session, using
+ * 'appium_handler.dart's 'enterText' performActions handling - same finder-resolution mechanism
+ * as a tap/existence check. Same local pre-check and rationale as 'verifyElementExistsAtCoordinates'
+ * for avoiding appium_handler.dart's non-null assertion crash on an empty hit-test.
+ *
+ * If recording, the resolved locator is attached to the just-recorded action (see
+ * 'RECORD_FLUTTER_FINDER'), so Flutter-aware code generators (see 'lib/client-frameworks/dart-*.js')
+ * can emit a widget-based 'tester.enterText(...)'/'$(...).enterText(...)' call.
+ */
+export function enterTextAtCoordinates(x, y, text) {
+  return async (dispatch, getState) => {
+    const {sourceJSON, isRecording} = getState().inspector;
+    if (!findElementAtPoint(sourceJSON, x, y)) {
+      notification.error({title: i18n.t('noElementFoundAtPosition')});
+      return;
+    }
+
+    const {POINTER_NAME, DURATION_1} = DEFAULT_TAP;
+    const enterTextAction = applyClientMethod({
+      methodName: SCREENSHOT_INTERACTION_MODE.ENTER_TEXT,
+      args: [
+        {
+          [POINTER_NAME]: [
+            {type: POINTER_TYPES.POINTER_MOVE, duration: DURATION_1, x, y},
+            {type: SCREENSHOT_INTERACTION_MODE.ENTER_TEXT, text},
+          ],
+        },
+      ],
+    });
+    const commandRes = await enterTextAction(dispatch, getState);
+    const flutterFinder = parseFlutterFinderFromResponse(commandRes);
+
+    if (!flutterFinder) {
+      notification.error({title: i18n.t('couldNotResolveElementLocator')});
+      return;
+    }
+
+    if (isRecording) {
+      dispatch({type: RECORD_FLUTTER_FINDER, flutterFinder});
+    }
+  };
+}
+
+/**
+ * Checks (read-only) whether the widget at the given point of a Flutter driver session currently
+ * displays exactly 'expectedText', using 'appium_handler.dart's 'checkText' performActions
+ * handling. Same local pre-check and rationale as 'verifyElementExistsAtCoordinates' for avoiding
+ * appium_handler.dart's non-null assertion crash on an empty hit-test.
+ *
+ * Unlike a tap/existence check, the resolved locator isn't used as-is: appium_handler.dart
+ * doesn't actually compare the widget's text against 'expectedText' server-side (as of this
+ * writing, its 'checkText'/'checkExistence' handling is identical - only the returned widget's
+ * own 'text' differs, which is used here for live pass/fail feedback while recording). So instead
+ * of the auto-resolved 'foundBy'/'value' (which could be tooltip/semanticsLabel/key/type instead
+ * of text), a 'byText' locator for 'expectedText' itself is recorded - the same widget-existence
+ * mechanism as 'verifyElementExistsAtCoordinates', but always by exact text content. When the
+ * *generated* test runs, this correctly passes only if the widget then displays 'expectedText'.
+ */
+export function checkTextAtCoordinates(x, y, expectedText) {
+  return async (dispatch, getState) => {
+    const {sourceJSON, isRecording} = getState().inspector;
+    if (!findElementAtPoint(sourceJSON, x, y)) {
+      notification.error({title: i18n.t('noElementFoundAtPosition')});
+      return;
+    }
+
+    const {POINTER_NAME, DURATION_1} = DEFAULT_TAP;
+    const checkTextAction = applyClientMethod({
+      methodName: SCREENSHOT_INTERACTION_MODE.CHECK_TEXT,
+      args: [
+        {
+          [POINTER_NAME]: [
+            {type: POINTER_TYPES.POINTER_MOVE, duration: DURATION_1, x, y},
+            {type: SCREENSHOT_INTERACTION_MODE.CHECK_TEXT, text: expectedText},
+          ],
+        },
+      ],
+    });
+    const commandRes = await checkTextAction(dispatch, getState);
+    const resolved = parseFlutterFinderFromResponse(commandRes);
+
+    if (!resolved) {
+      notification.error({title: i18n.t('couldNotResolveElementLocator')});
+      return;
+    }
+
+    if (resolved.text === expectedText) {
+      notification.success({title: i18n.t('checkTextMatched', {actualText: resolved.text})});
+    } else {
+      notification.warning({
+        title: i18n.t('checkTextDidNotMatch', {actualText: resolved.text, expectedText}),
+      });
+    }
+
+    if (isRecording) {
+      dispatch({
+        type: RECORD_FLUTTER_FINDER,
+        flutterFinder: {foundBy: 'byText', value: expectedText, shouldExist: true},
+      });
+    }
+  };
+}
+
+/**
  * Sends a coordinate-based tap ('performActions' with a pointerMove/Down/Pause/Up sequence),
  * without attempting to resolve which element it landed on beforehand.
  */
@@ -1175,7 +1337,7 @@ function tapFlutterWidgetAtCoordinates(x, y) {
     const commandRes = await tapRawCoordinates(x, y)(dispatch, getState);
 
     if (wasRecording) {
-      const flutterFinder = parseFlutterFinderFromTapResponse(commandRes);
+      const flutterFinder = parseFlutterFinderFromResponse(commandRes);
       if (flutterFinder) {
         dispatch({type: RECORD_FLUTTER_FINDER, flutterFinder});
       }
@@ -1187,16 +1349,19 @@ function tapFlutterWidgetAtCoordinates(x, y) {
 
 /**
  * Parses the '{text, elementId, type, foundBy, value}' JSON that 'appium_handler.dart's
- * 'performActions' handler returns after resolving/performing a tap, out of the raw driver
- * response for the 'performActions' command.
+ * 'performActions' handler returns after resolving a tap, existence check, enterText or
+ * checkText, out of the raw driver response for the 'performActions' command. 'text' is the
+ * resolved widget's own current text content (used by 'checkTextAtCoordinates' to compare
+ * against the expected value; ignored by tap/checkExistence/enterText).
  *
- * @returns {{foundBy: string, value: string}|null} null if the response wasn't in the expected
- * shape (e.g. not a Flutter session using this driver/handler pairing, or no widget was resolved)
+ * @returns {{foundBy: string, value: string, text: string}|null} null if the response wasn't in
+ * the expected shape (e.g. not a Flutter session using this driver/handler pairing, or no widget
+ * was resolved)
  */
-function parseFlutterFinderFromTapResponse(commandRes) {
+function parseFlutterFinderFromResponse(commandRes) {
   try {
-    const {foundBy, value} = JSON.parse(commandRes.response.message);
-    return foundBy && value ? {foundBy, value} : null;
+    const {foundBy, value, text} = JSON.parse(commandRes.response.message);
+    return foundBy && value ? {foundBy, value, text} : null;
   } catch {
     return null;
   }

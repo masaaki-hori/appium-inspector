@@ -11,7 +11,7 @@ import {
 import {log} from '../../utils/logger.js';
 import {parseHtmlSource, setHtmlElementAttributes} from '../../utils/webview.js';
 
-const {TAP, SWIPE, GESTURE} = SCREENSHOT_INTERACTION_MODE;
+const {TAP, SWIPE, GESTURE, CHECK_EXISTENCE, ENTER_TEXT, CHECK_TEXT} = SCREENSHOT_INTERACTION_MODE;
 
 // Selector for the Android webview - includes the correct top and bottom boundaries
 const ANDROID_WEBVIEW_SELECTOR = 'android.webkit.WebView';
@@ -147,7 +147,7 @@ export default class InspectorDriver {
       res = await cachedEl.el[methodName].apply(cachedEl.el, args);
     } else {
       // Specially handle the tap and swipe method
-      if ([TAP, SWIPE, GESTURE].includes(methodName)) {
+      if ([TAP, SWIPE, GESTURE, CHECK_EXISTENCE, ENTER_TEXT, CHECK_TEXT].includes(methodName)) {
         const actions = Object.keys(args[0]).map((key) => ({
           type: 'pointer',
           id: key,
