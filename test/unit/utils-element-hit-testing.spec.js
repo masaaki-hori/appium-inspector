@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {
+  findAllElementsAtPoint,
   findElementAtPoint,
   getElementDisplayName,
 } from '../../app/common/renderer/utils/element-hit-testing.js';
@@ -90,6 +91,37 @@ describe('utils/element-hit-testing.js', function () {
 
     it('should return null when given no source', function () {
       expect(findElementAtPoint(null, 10, 10)).toBeNull();
+    });
+  });
+
+  describe('#findAllElementsAtPoint', function () {
+    it('should return every ancestor whose bounds contain the point, most specific first', function () {
+      const matches = findAllElementsAtPoint(buildNestedSource(), 20, 20);
+      // Same root-exclusion rule as findElementAtPoint - the root's empty path isn't included
+      expect(matches.map((element) => element.path)).toEqual(['0.0', '0']);
+    });
+
+    it('should return every overlapping sibling, topmost first', function () {
+      const matches = findAllElementsAtPoint(buildOverlappingSource(), 5, 5);
+      expect(matches.map((element) => element.path)).toEqual(['1', '0']);
+    });
+
+    it('should return an empty array when no element contains the point', function () {
+      expect(findAllElementsAtPoint(buildNestedSource(), 500, 500)).toEqual([]);
+    });
+
+    it('should never match the root element, which has an empty path', function () {
+      const source = {
+        tagName: 'android.widget.FrameLayout',
+        path: '',
+        attributes: {bounds: '[0,0][200,200]'},
+        children: [],
+      };
+      expect(findAllElementsAtPoint(source, 150, 150)).toEqual([]);
+    });
+
+    it('should return an empty array when given no source', function () {
+      expect(findAllElementsAtPoint(null, 10, 10)).toEqual([]);
     });
   });
 

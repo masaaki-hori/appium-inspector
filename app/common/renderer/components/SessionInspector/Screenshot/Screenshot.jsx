@@ -1,12 +1,16 @@
 import {Dropdown, Input, Modal, Spin} from 'antd';
-import {Fragment, useState} from 'react';
+import {Fragment, useRef, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
 import {DRIVERS} from '../../../constants/common.js';
 import {GESTURE_ITEM_STYLES, POINTER_TYPES} from '../../../constants/gestures.js';
 import {DEFAULT_SWIPE, SCREENSHOT_INTERACTION_MODE} from '../../../constants/screenshot.js';
 import {INSPECTOR_TABS} from '../../../constants/session-inspector.js';
-import {findElementAtPoint, getElementDisplayName} from '../../../utils/element-hit-testing.js';
+import {
+  findAllElementsAtPoint,
+  findElementAtPoint,
+  getElementDisplayName,
+} from '../../../utils/element-hit-testing.js';
 import inspectorStyles from '../SessionInspector.module.css';
 import HighlighterRects from './HighlighterRects.jsx';
 import styles from './Screenshot.module.css';
@@ -47,16 +51,46 @@ const Screenshot = (props) => {
   const [enterTextValue, setEnterTextValue] = useState('');
   const [checkTextModalOpen, setCheckTextModalOpen] = useState(false);
   const [checkTextValue, setCheckTextValue] = useState('');
+  // The live 'x'/'y' hover state gets reset to null by handleScreenshotLeave as soon as the mouse
+  // leaves the screenshot - which happens the instant the context menu's dropdown overlay appears
+  // (the browser re-targets the pointer to the topmost element, not just when a later modal's OK
+  // button is clicked), well before any menu item can be clicked. So the context menu can't rely
+  // on 'x'/'y' at all - handleScreenshotContextMenu captures the position straight from the
+  // right-click event itself into this ref, which every context menu action reads instead.
+  const rightClickCoordsRef = useRef(null);
+  // Which specific element (by page-source id) a context menu action should target, when more
+  // than one element's bounds contained the right-clicked point and the user picked one from the
+  // disambiguation submenu built from rightClickCandidates below - undefined otherwise, meaning
+  // "let appium_handler.dart hit-test the coordinate itself" (the pre-existing, single-candidate
+  // behavior). Enter Text/Check Text need this remembered separately from the click that set it,
+  // since their actual action only fires later, when the modal's OK button is clicked.
+  const selectedElementIdRef = useRef(undefined);
+  // Every element whose bounds contain the right-clicked point, most specific first - see
+  // findAllElementsAtPoint. Needs to be state (not just a ref like the two above) because it
+  // drives what the context menu itself renders, not just what a later action call uses.
+  const [rightClickCandidates, setRightClickCandidates] = useState([]);
+
+  const handleScreenshotContextMenu = (e) => {
+    const point = {
+      x: Math.round(e.nativeEvent.offsetX * scaleRatio),
+      y: Math.round(e.nativeEvent.offsetY * scaleRatio),
+    };
+    rightClickCoordsRef.current = point;
+    selectedElementIdRef.current = undefined;
+    setRightClickCandidates(findAllElementsAtPoint(sourceJSON, point.x, point.y));
+  };
 
   const handleEnterTextOk = async () => {
     setEnterTextModalOpen(false);
-    await enterTextAtCoordinates(x, y, enterTextValue);
+    const {x: tx, y: ty} = rightClickCoordsRef.current ?? {};
+    await enterTextAtCoordinates(tx, ty, enterTextValue, selectedElementIdRef.current);
     setEnterTextValue('');
   };
 
   const handleCheckTextOk = async () => {
     setCheckTextModalOpen(false);
-    await checkTextAtCoordinates(x, y, checkTextValue);
+    const {x: tx, y: ty} = rightClickCoordsRef.current ?? {};
+    await checkTextAtCoordinates(tx, ty, checkTextValue, selectedElementIdRef.current);
     setCheckTextValue('');
   };
 
@@ -67,14 +101,25 @@ const Screenshot = (props) => {
     }
   };
 
-  const handleScreenshotDown = async () => {
+  const handleScreenshotDown = async (e) => {
+    // Only the primary (left) button starts a tap/swipe - a right-click is handled entirely by
+    // the context menu below, and shouldn't also register as the start of a tap/swipe gesture
+    if (e.button !== 0) {
+      return;
+    }
     const {setCoordStart} = props;
     if (screenshotInteractionMode === TAP_SWIPE) {
       await setCoordStart(x, y);
     }
   };
 
-  const handleScreenshotUp = async () => {
+  const handleScreenshotUp = async (e) => {
+    // Same rationale as handleScreenshotDown - without this, releasing the right mouse button
+    // after a context-menu click would also perform (and, if recording, record) a tap/swipe at
+    // that position
+    if (e.button !== 0) {
+      return;
+    }
     const {setCoordEnd} = props;
     if (screenshotInteractionMode === TAP_SWIPE) {
       await setCoordEnd(x, y);
@@ -183,32 +228,62 @@ const Screenshot = (props) => {
   const points = getGestureCoordinates();
 
   // The right-click menu (Flutter driver sessions only) is only meaningful while tracking a
-  // tap/swipe coordinate, since its actions rely on the same 'x'/'y' state
+  // tap/swipe coordinate, since its actions rely on rightClickCoordsRef being populated by
+  // handleScreenshotContextMenu below
   const canUseFlutterContextMenu =
     automationName === DRIVERS.FLUTTER && screenshotInteractionMode === TAP_SWIPE;
+
+  // The four context menu actions, targeting a specific element (by page-source id) when more
+  // than one candidate matched the clicked point - see buildFlutterContextMenuItems below.
+  // 'keyPrefix' keeps antd Menu item keys unique when this is called once per candidate.
+  const buildActionItems = (elementId, keyPrefix = '') => [
+    {
+      key: `${keyPrefix}verifyElementExists`,
+      label: t('verifyElementExists'),
+      onClick: () => {
+        const {x: cx, y: cy} = rightClickCoordsRef.current ?? {};
+        verifyElementExistsAtCoordinates(cx, cy, true, elementId);
+      },
+    },
+    {
+      key: `${keyPrefix}verifyElementDoesNotExist`,
+      label: t('verifyElementDoesNotExist'),
+      onClick: () => {
+        const {x: cx, y: cy} = rightClickCoordsRef.current ?? {};
+        verifyElementExistsAtCoordinates(cx, cy, false, elementId);
+      },
+    },
+    {
+      key: `${keyPrefix}enterText`,
+      label: t('enterTextMenuItem'),
+      onClick: () => {
+        selectedElementIdRef.current = elementId;
+        setEnterTextModalOpen(true);
+      },
+    },
+    {
+      key: `${keyPrefix}checkText`,
+      label: t('checkTextMenuItem'),
+      onClick: () => {
+        selectedElementIdRef.current = elementId;
+        setCheckTextModalOpen(true);
+      },
+    },
+  ];
+
+  // With 0 or 1 candidates, there's nothing to disambiguate - same flat menu as always, and
+  // appium_handler.dart hit-tests the coordinate itself (elementId undefined) exactly like
+  // before this feature existed. With more than one, each candidate becomes its own submenu of
+  // the same four actions, so the user can pick which overlapping widget they meant.
   const flutterContextMenu = {
-    items: [
-      {
-        key: 'verifyElementExists',
-        label: t('verifyElementExists'),
-        onClick: () => verifyElementExistsAtCoordinates(x, y, true),
-      },
-      {
-        key: 'verifyElementDoesNotExist',
-        label: t('verifyElementDoesNotExist'),
-        onClick: () => verifyElementExistsAtCoordinates(x, y, false),
-      },
-      {
-        key: 'enterText',
-        label: t('enterTextMenuItem'),
-        onClick: () => setEnterTextModalOpen(true),
-      },
-      {
-        key: 'checkText',
-        label: t('checkTextMenuItem'),
-        onClick: () => setCheckTextModalOpen(true),
-      },
-    ],
+    items:
+      rightClickCandidates.length > 1
+        ? rightClickCandidates.map((element, index) => ({
+            key: `element-${index}`,
+            label: getElementDisplayName(element),
+            children: buildActionItems(element.attributes?.id, `element-${index}-`),
+          }))
+        : buildActionItems(rightClickCandidates[0]?.attributes?.id),
   };
 
   // Show the screenshot and highlighter rects.
@@ -229,6 +304,7 @@ const Screenshot = (props) => {
             onMouseOver={handleScreenshotCoordsUpdate}
             onMouseLeave={handleScreenshotLeave}
             onClick={handleScreenshotClick}
+            onContextMenu={handleScreenshotContextMenu}
             className={inspectorStyles.screenshotBox}
           >
             {screenshotInteractionMode !== SELECT && (

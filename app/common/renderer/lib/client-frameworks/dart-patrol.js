@@ -9,6 +9,7 @@ export default class DartPatrolFramework extends DartFlutterFramework {
 //
 // It runs in-process with the app-under-test (no Appium/WebDriver session), so replace the
 // import below with your app's actual entrypoint
+import 'package:flutter/services.dart';
 import 'package:patrol/patrol.dart';
 
 import 'package:my_app/main.dart' as app;
@@ -49,6 +50,15 @@ await $.pumpAndSettle();`;
       return this.addComment('Could not resolve a widget to enter text into at this position');
     }
     const text = this.getEnterTextFromPointerActions(pointerActions);
-    return `await $(${finderExpr}).enterText(${JSON.stringify(text)});`;
+    // 'submitted' - see parseFlutterFinderFromResponse in actions/SessionInspector.js - means the
+    // live interaction also sent a TextInputAction.done after entering the text; matching that in
+    // generated code is what makes a field's onSubmitted/onFieldSubmitted fire when this runs.
+    // Uses '$.tester' (not the auto-pumping '$(...)' wrapper) since there's no patrol-native
+    // shorthand for sending a text input action, so pumpAndSettle is called explicitly after -
+    // same reasoning as codeFor_swipe's raw '$.tester.dragFrom' call above.
+    const submitStep = flutterFinder.submitted
+      ? '\nawait $.tester.testTextInput.receiveAction(TextInputAction.done);\nawait $.pumpAndSettle();'
+      : '';
+    return `await $(${finderExpr}).enterText(${JSON.stringify(text)});${submitStep}`;
   }
 }

@@ -16,6 +16,7 @@ import {BUTTON} from '../../constants/antd-types.js';
 import {WINDOW_DIMENSIONS} from '../../constants/common.js';
 import {SCREENSHOT_INTERACTION_MODE} from '../../constants/screenshot.js';
 import {
+  AUTO_REFRESH_INTERVAL,
   INSPECTOR_TABS,
   MJPEG_STREAM_CHECK_INTERVAL,
   SESSION_EXPIRY_PROMPT_TIMEOUT,
@@ -79,10 +80,18 @@ const Inspector = (props) => {
     setSessionTime,
     storeSessionSettings,
     setAwaitingMjpegStream,
+    methodCallInProgress,
   } = props;
 
   const screenshotContainerElRef = useRef(null);
   const mjpegStreamCheckIntervalRef = useRef(null);
+  const autoRefreshIntervalRef = useRef(null);
+  // Read fresh at each auto-refresh tick without having to restart the interval every time a
+  // method call starts/finishes (which would happen very often)
+  const methodCallInProgressRef = useRef(methodCallInProgress);
+  useEffect(() => {
+    methodCallInProgressRef.current = methodCallInProgress;
+  }, [methodCallInProgress]);
   // Debounced updater stored in a ref to avoid creating it during render
   const updateScreenshotScaleDebouncedRef = useRef(undefined);
 
@@ -238,6 +247,27 @@ const Inspector = (props) => {
     };
   }, [checkMjpegStream, isUsingMjpegMode, updateScreenshotScaleDebounced, windowSize]);
 
+  // Periodically re-fetch the screenshot/source on their own, so the Inspector eventually shows
+  // app state changes that weren't driven by an Inspector-initiated action (e.g. a timer in the
+  // app-under-test), instead of staying stuck on a stale screen until the user happens to
+  // interact again. Not needed in MJPEG mode, which already streams continuously. Skips a tick
+  // entirely (rather than queuing) if a method call - including a previous auto-refresh tick - is
+  // already in flight, so this never piles up requests during a slow/unresponsive session.
+  useEffect(() => {
+    if (isUsingMjpegMode || !isSourceRefreshOn) {
+      return;
+    }
+    autoRefreshIntervalRef.current = setInterval(() => {
+      if (!methodCallInProgressRef.current) {
+        applyClientMethod({methodName: 'getPageSource'});
+      }
+    }, AUTO_REFRESH_INTERVAL);
+    return () => {
+      clearInterval(autoRefreshIntervalRef.current);
+      autoRefreshIntervalRef.current = null;
+    };
+  }, [applyClientMethod, isSourceRefreshOn, isUsingMjpegMode]);
+
   // If session expiry prompt is shown, start timeout until session is automatically quit.
   // Timeout should remain active until it fires or user acts (keep alive / quit).
   useEffect(() => {
@@ -325,7 +355,10 @@ const Inspector = (props) => {
         {screenShotControls}
         {showScreenshot && <Screenshot {...props} scaleRatio={scaleRatio} />}
         {screenshotError && t('couldNotObtainScreenshot', {screenshotError})}
-        {!showScreenshot && (
+        {/* Only show the loading spinner while genuinely still waiting for the first
+            screenshot - once screenshotError is set, spinning forever would be misleading,
+            since retrying won't happen on its own */}
+        {!showScreenshot && !screenshotError && (
           <Spin size="large" spinning={true}>
             <div className={styles.screenshotBox} />
           </Spin>

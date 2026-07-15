@@ -131,6 +131,40 @@ describe('lib/client-frameworks/dart-*.js', function () {
         expect(code).not.toContain('enterText(');
       });
 
+      it('should also submit a TextInputAction.done after entering text when the live interaction did', function () {
+        const framework = new FrameworkClass();
+        framework.actions = [
+          {
+            action: 'enterText',
+            params: [
+              undefined,
+              undefined,
+              ENTER_TEXT_POINTER_ACTIONS,
+              {foundBy: 'byValueKey', value: 'email-field', submitted: true},
+            ],
+          },
+        ];
+        const code = framework.getCodeString();
+        expect(code).toContain('testTextInput.receiveAction(TextInputAction.done)');
+      });
+
+      it('should not submit a TextInputAction.done when the live interaction did not', function () {
+        const framework = new FrameworkClass();
+        framework.actions = [
+          {
+            action: 'enterText',
+            params: [
+              undefined,
+              undefined,
+              ENTER_TEXT_POINTER_ACTIONS,
+              {foundBy: 'byValueKey', value: 'email-field', submitted: false},
+            ],
+          },
+        ];
+        const code = framework.getCodeString();
+        expect(code).not.toContain('TextInputAction');
+      });
+
       it('should render a text-content assertion for a recorded checkText action', function () {
         const framework = new FrameworkClass();
         framework.actions = [
@@ -169,6 +203,7 @@ describe('lib/client-frameworks/dart-*.js', function () {
       ['byValueKey', 'submit-btn', 'find.byKey(const Key("submit-btn"))'],
       ['byText', 'Submit', 'find.text("Submit")'],
       ['byType', 'ElevatedButton', 'find.byType(ElevatedButton)'],
+      ['byType', 'Icon#3', 'find.byType(Icon).at(3)'],
     ])('should map %s to the matching Finder expression', (foundBy, value, expected) => {
       const framework = new DartIntegrationTestFramework();
       expect(framework.getFlutterFinderExpression({foundBy, value})).toBe(expected);

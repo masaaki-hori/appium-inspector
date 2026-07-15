@@ -176,14 +176,29 @@ export default class InspectorDriver {
     // Give the source/screenshot time to change
     await new Promise((resolve) => setTimeout(resolve, REFRESH_DELAY_MILLIS));
 
-    const screenshotPromise = skipScreenshot ? {} : this.getScreenshotUpdate();
+    const screenshotPromise = skipScreenshot ? Promise.resolve({}) : this.getScreenshotUpdate();
     const windowSizePromise = this.getWindowUpdate();
     const sourcePromise = this.getSourceUpdate();
-    const [screenshotUpdate, windowSizeUpdate, sourceUpdate] = await Promise.all([
+    // Use allSettled (not all): each of these already converts most failures into an 'xError'
+    // field internally, but still rethrows for UNKNOWN_ERROR (e.g. a broken/flaky screenshot
+    // capture). With Promise.all, that single rejection would discard the other two results even
+    // when they succeeded, permanently losing e.g. a perfectly good page source because the
+    // screenshot capture failed
+    const [screenshotResult, windowSizeResult, sourceResult] = await Promise.allSettled([
       screenshotPromise,
       windowSizePromise,
       sourcePromise,
     ]);
+    const screenshotUpdate =
+      screenshotResult.status === 'fulfilled'
+        ? screenshotResult.value
+        : {screenshotError: screenshotResult.reason};
+    const windowSizeUpdate =
+      windowSizeResult.status === 'fulfilled'
+        ? windowSizeResult.value
+        : {windowSizeError: windowSizeResult.reason};
+    const sourceUpdate =
+      sourceResult.status === 'fulfilled' ? sourceResult.value : {sourceError: sourceResult.reason};
     // only do context updates if user has selected web/hybrid mode (takes forever)
     const contextUpdate =
       appMode === APP_MODE.WEB_HYBRID ? await this.getContextUpdate(windowSizeUpdate) : {};
@@ -445,6 +460,13 @@ export default class InspectorDriver {
   async getScreenshotUpdate() {
     try {
       const screenshot = await this.driver.takeScreenshot();
+      if (!screenshot) {
+        // Some drivers (e.g. Flutter, when the underlying VM service screenshot call fails)
+        // resolve successfully with an empty/null result instead of rejecting. Treat that the
+        // same as a real failure, so it's surfaced as 'screenshotError' instead of leaving the
+        // UI stuck showing a perpetual loading spinner for a screenshot that will never arrive
+        throw new Error('The driver returned an empty screenshot');
+      }
       return {screenshot};
     } catch (err) {
       if (err.name === UNKNOWN_ERROR) {

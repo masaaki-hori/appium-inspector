@@ -1,6 +1,12 @@
 export const MJPEG_STREAM_CHECK_INTERVAL = 1000;
 export const SESSION_EXPIRY_PROMPT_TIMEOUT = 60 * 60 * 1000; // Give user 1 hour to reply
 export const REFRESH_DELAY_MILLIS = 500;
+// How often to re-fetch the screenshot/source on their own, so the Inspector eventually catches
+// up with app state changes that weren't driven by an Inspector-initiated action (e.g. a timer
+// in the app-under-test). Deliberately not "live" - just frequent enough that the Inspector
+// doesn't stay stuck showing a stale screen indefinitely. Only applies outside MJPEG mode, which
+// already streams continuously.
+export const AUTO_REFRESH_INTERVAL = 3000;
 
 export const APP_MODE = {
   NATIVE: 'native',

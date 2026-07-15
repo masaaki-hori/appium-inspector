@@ -142,7 +142,10 @@ const AppSourceTreeWrapper = ({
   return (
     <div id="sourceContainer" className={styles.treeContainer} tabIndex="0">
       {!sourceJSON && !sourceError && <i>{t('Gathering initial app source…')}</i>}
-      {sourceError && t('couldNotObtainSource', {errorMsg: JSON.stringify(sourceError)})}
+      {/* Pass the raw Error object (not JSON.stringify, whose 'message'/'stack' are
+          non-enumerable and so get dropped) - i18next stringifies it via toString(), same as
+          'couldNotObtainScreenshot' does for 'screenshotError' */}
+      {sourceError && t('couldNotObtainSource', {errorMsg: sourceError})}
       {/* Show loading indicator in MJPEG mode if a method call is in progress and source refresh is on */}
       <Spin size="large" spinning={!!methodCallInProgress && isUsingMjpegMode && isSourceRefreshOn}>
         {/* Must switch to a new antd Tree component when there's changes to treeData  */}

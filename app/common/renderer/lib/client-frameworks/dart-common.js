@@ -49,12 +49,17 @@ export default class DartFlutterFramework extends CommonClientFramework {
         return `find.byKey(const Key(${JSON.stringify(value)}))`;
       case 'byText':
         return `find.text(${JSON.stringify(value)})`;
-      case 'byType':
-        // 'value' is the widget's Dart runtime type name, used here as a bare identifier.
-        // Generic types (e.g. containing '-' where appium-handler sanitized '<'/'>') or
-        // private ('_'-prefixed) types may need manual fixup, since they aren't directly
-        // importable/referenceable as written.
-        return `find.byType(${value})`;
+      case 'byType': {
+        // 'value' is the widget's Dart runtime type name, used here as a bare identifier -
+        // optionally suffixed with '#<index>' (appium_handler.dart's 'ByTypeIndex' finder) when
+        // a plain type match was ambiguous (more than one widget of that type on screen) and got
+        // narrowed to this widget's position among same-typed widgets in the page source, via
+        // '.at(index)'. Generic types (e.g. containing '-' where appium-handler sanitized
+        // '<'/'>') or private ('_'-prefixed) types may need manual fixup either way, since they
+        // aren't directly importable/referenceable as written.
+        const [type, index] = value.split('#');
+        return index === undefined ? `find.byType(${type})` : `find.byType(${type}).at(${index})`;
+      }
       default:
         return null;
     }

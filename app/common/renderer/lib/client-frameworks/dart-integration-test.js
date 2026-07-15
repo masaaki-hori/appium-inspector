@@ -9,6 +9,7 @@ export default class DartIntegrationTestFramework extends DartFlutterFramework {
 //
 // It runs in-process with the app-under-test (no Appium/WebDriver session), so replace the
 // import below with your app's actual entrypoint
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -52,7 +53,13 @@ await tester.pumpAndSettle();`;
       return this.addComment('Could not resolve a widget to enter text into at this position');
     }
     const text = this.getEnterTextFromPointerActions(pointerActions);
+    // 'submitted' - see parseFlutterFinderFromResponse in actions/SessionInspector.js - means the
+    // live interaction also sent a TextInputAction.done after entering the text; matching that in
+    // generated code is what makes a field's onSubmitted/onFieldSubmitted fire when this runs.
+    const submitStep = flutterFinder.submitted
+      ? '\nawait tester.testTextInput.receiveAction(TextInputAction.done);\nawait tester.pumpAndSettle();'
+      : '';
     return `await tester.enterText(${finderExpr}, ${JSON.stringify(text)});
-await tester.pumpAndSettle();`;
+await tester.pumpAndSettle();${submitStep}`;
   }
 }
