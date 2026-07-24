@@ -164,3 +164,53 @@
   stroke-dasharray: 0.9%;
   border-style: dashed;
 }
+
+.contextMenu {
+  position: fixed;
+  z-index: 1000;
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+  min-width: 180px;
+  padding: 4px 0;
+  /* Scroll internally rather than overflowing past the viewport when there are many candidates
+     (e.g. many overlapping elements at the clicked point) */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+}
+
+.contextMenuList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.contextMenuItem {
+  position: relative;
+  padding: 6px 16px;
+  white-space: nowrap;
+  cursor: pointer;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.contextMenuItem:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.contextSubmenuList {
+  /* Positioned via inline style (submenuPos, computed in JS from the hovered candidate row's own
+     bounding rect) - fixed, not absolute, since this renders as a sibling of .contextMenu rather
+     than nested inside its candidate <li>, precisely to stay clear of .contextMenu's own
+     overflow-y (see submenuPos's declaration in Screenshot.jsx for why). */
+  position: fixed;
+  z-index: 1000;
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+  min-width: 200px;
+  padding: 4px 0;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+}

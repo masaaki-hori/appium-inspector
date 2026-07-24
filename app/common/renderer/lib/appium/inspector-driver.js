@@ -172,6 +172,15 @@ export default class InspectorDriver {
     };
   }
 
+  // Whether the current session's capabilities requested the Flutter driver - see handleRefresh's
+  // use of this for why (that driver has no real WebView-hybrid concept to search for).
+  isFlutterSession() {
+    const {
+      client: {capabilities},
+    } = this.driver;
+    return _.toLower(capabilities?.automationName) === 'flutter';
+  }
+
   async handleRefresh(skipScreenshot, appMode) {
     // Give the source/screenshot time to change
     await new Promise((resolve) => setTimeout(resolve, REFRESH_DELAY_MILLIS));
@@ -199,9 +208,16 @@ export default class InspectorDriver {
         : {windowSizeError: windowSizeResult.reason};
     const sourceUpdate =
       sourceResult.status === 'fulfilled' ? sourceResult.value : {sourceError: sourceResult.reason};
-    // only do context updates if user has selected web/hybrid mode (takes forever)
+    // Only do context updates if user has selected web/hybrid mode (takes forever) - and never
+    // for a Flutter driver session, which has no real WebView-hybrid concept: getContextUpdate's
+    // HTML-tagging script injection ('execute/sync') isn't supported there, and this runs after
+    // *every* method call while appMode is WEB_HYBRID (not just an explicit hybrid-mode search),
+    // so it would otherwise error on every single Flutter action taken in that app mode - e.g.
+    // right after 'selectAppMode' switches back to the FLUTTER context itself.
     const contextUpdate =
-      appMode === APP_MODE.WEB_HYBRID ? await this.getContextUpdate(windowSizeUpdate) : {};
+      appMode === APP_MODE.WEB_HYBRID && !this.isFlutterSession()
+        ? await this.getContextUpdate(windowSizeUpdate)
+        : {};
     return {
       ...contextUpdate,
       ...sourceUpdate,

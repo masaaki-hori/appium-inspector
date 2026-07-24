@@ -19,6 +19,7 @@ import {
   AUTO_REFRESH_INTERVAL,
   INSPECTOR_TABS,
   MJPEG_STREAM_CHECK_INTERVAL,
+  SCREENSHOT_SCALE_REFRESH_EVENT,
   SESSION_EXPIRY_PROMPT_TIMEOUT,
 } from '../../constants/session-inspector.js';
 import {downloadFile} from '../../utils/file-handling.js';
@@ -92,6 +93,13 @@ const Inspector = (props) => {
   useEffect(() => {
     methodCallInProgressRef.current = methodCallInProgress;
   }, [methodCallInProgress]);
+  // Whether the Flutter right-click context menu (or a modal opened from it) is currently up -
+  // see the auto-refresh interval below, and Screenshot.jsx's onContextMenuActiveChange callback
+  // that keeps this current.
+  const contextMenuActiveRef = useRef(false);
+  const handleContextMenuActiveChange = useCallback((active) => {
+    contextMenuActiveRef.current = active;
+  }, []);
   // Debounced updater stored in a ref to avoid creating it during render
   const updateScreenshotScaleDebouncedRef = useRef(undefined);
 
@@ -103,9 +111,13 @@ const Inspector = (props) => {
   const navigate = useNavigate();
   const {t} = useTranslation();
 
+  // Once a screenshot has been obtained, keep showing it - and keep <Screenshot> mounted -
+  // even if a later periodic auto-refresh transiently fails to get a new one (e.g. the Flutter
+  // driver's VM service screenshot call flaking). Unmounting on every such hiccup was destroying
+  // the right-click context menu/modal state that lives inside <Screenshot>. The error, if any,
+  // still renders alongside the (now possibly stale) screenshot - see the JSX below.
   const showScreenshot =
-    (screenshot && !screenshotError) ||
-    (isUsingMjpegMode && (!isSourceRefreshOn || !isAwaitingMjpegStream));
+    !!screenshot || (isUsingMjpegMode && (!isSourceRefreshOn || !isAwaitingMjpegStream));
 
   const updateScreenshotScale = useCallback(() => {
     // If the screenshot has too much space to the right or bottom, adjust the max width
@@ -232,6 +244,9 @@ const Inspector = (props) => {
     }
     updateScreenshotScaleDebounced();
     window.addEventListener('resize', updateScreenshotScaleDebounced);
+    // Separate from the real 'resize' listener above - see SCREENSHOT_SCALE_REFRESH_EVENT's
+    // definition for why this can't just reuse a real 'resize' event dispatch.
+    window.addEventListener(SCREENSHOT_SCALE_REFRESH_EVENT, updateScreenshotScaleDebounced);
     if (isUsingMjpegMode) {
       mjpegStreamCheckIntervalRef.current = setInterval(
         checkMjpegStream,
@@ -240,6 +255,7 @@ const Inspector = (props) => {
     }
     return () => {
       window.removeEventListener('resize', updateScreenshotScaleDebounced);
+      window.removeEventListener(SCREENSHOT_SCALE_REFRESH_EVENT, updateScreenshotScaleDebounced);
       if (mjpegStreamCheckIntervalRef.current) {
         clearInterval(mjpegStreamCheckIntervalRef.current);
         mjpegStreamCheckIntervalRef.current = null;
@@ -258,7 +274,7 @@ const Inspector = (props) => {
       return;
     }
     autoRefreshIntervalRef.current = setInterval(() => {
-      if (!methodCallInProgressRef.current) {
+      if (!methodCallInProgressRef.current && !contextMenuActiveRef.current) {
         applyClientMethod({methodName: 'getPageSource'});
       }
     }, AUTO_REFRESH_INTERVAL);
@@ -353,7 +369,13 @@ const Inspector = (props) => {
         ref={screenshotContainerElRef}
       >
         {screenShotControls}
-        {showScreenshot && <Screenshot {...props} scaleRatio={scaleRatio} />}
+        {showScreenshot && (
+          <Screenshot
+            {...props}
+            scaleRatio={scaleRatio}
+            onContextMenuActiveChange={handleContextMenuActiveChange}
+          />
+        )}
         {screenshotError && t('couldNotObtainScreenshot', {screenshotError})}
         {/* Only show the loading spinner while genuinely still waiting for the first
             screenshot - once screenshotError is set, spinning forever would be misleading,

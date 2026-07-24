@@ -145,7 +145,11 @@ export default function inspector(state = INITIAL_STATE, action) {
         sourceJSON: action.sourceJSON,
         sourceXML: action.sourceXML,
         sourceError: action.sourceError,
-        screenshot: action.screenshot,
+        // A transient screenshot fetch failure (e.g. the Flutter driver's VM service
+        // screenshot call flaking during periodic auto-refresh) carries no 'screenshot'
+        // of its own - keep showing the last good one instead of wiping it out, which
+        // would otherwise unmount <Screenshot> and lose any open context menu/modal state.
+        screenshot: action.screenshot ?? state.screenshot,
         screenshotError: action.screenshotError,
         windowSize: action.windowSize,
         windowSizeError: action.windowSizeError,

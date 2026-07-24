@@ -8,12 +8,23 @@ export const REFRESH_DELAY_MILLIS = 500;
 // already streams continuously.
 export const AUTO_REFRESH_INTERVAL = 3000;
 
+// Fired on 'window' after every applyClientMethod call to ask <SessionInspector> to recompute the
+// screenshot's scale ratio/container width. Deliberately a custom event, not a real 'resize' -
+// dispatching an actual 'resize' event here used to also reach antd's Dropdown/rc-trigger popup
+// handling (which auto-closes contextMenu-triggered popups on window resize), silently closing
+// the Flutter right-click context menu and any open Enter/Check Text modal on every periodic
+// auto-refresh tick.
+export const SCREENSHOT_SCALE_REFRESH_EVENT = 'appium-inspector:screenshot-scale-refresh';
+
 export const APP_MODE = {
   NATIVE: 'native',
   WEB_HYBRID: 'web_hybrid',
 };
 
 export const NATIVE_APP = 'NATIVE_APP';
+// The context name appium-flutter-driver's own context switch (see 'context.ts') resumes Flutter
+// widget-tree automation with, the counterpart to NATIVE_APP above.
+export const FLUTTER_CONTEXT = 'FLUTTER';
 
 export const UNKNOWN_ERROR = 'unknown error';
 export const SESSION_EXPIRED = 'Session Expired';

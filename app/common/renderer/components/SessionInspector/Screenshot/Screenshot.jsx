@@ -1,5 +1,5 @@
-import {Dropdown, Input, Modal, Spin} from 'antd';
-import {Fragment, useRef, useState} from 'react';
+import {Input, Modal, Spin} from 'antd';
+import {Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
 import {DRIVERS} from '../../../constants/common.js';
@@ -38,24 +38,54 @@ const Screenshot = (props) => {
     sourceJSON,
     tapAtCoordinates,
     automationName,
+    tapElementAtCoordinates,
     verifyElementExistsAtCoordinates,
     enterTextAtCoordinates,
     checkTextAtCoordinates,
+    onContextMenuActiveChange,
   } = props;
   const {t} = useTranslation();
 
   const [x, setX] = useState();
   const [y, setY] = useState();
   const [hoveredElement, setHoveredElement] = useState();
+  // Deliberately a hand-rolled menu, not antd's Dropdown/Menu: that implementation kept getting
+  // closed out from under the user by antd/rc-trigger's own internal close-on-layout-change
+  // behavior (window resize, ancestor scroll/reflow, etc. - all of which the periodic auto-refresh
+  // can trigger indirectly), including a state where the root menu closed but a nested submenu
+  // portal was orphaned on screen. Owning open/close/positioning outright removes that whole class
+  // of bug, at the cost of losing antd's automatic viewport-overflow handling (handled minimally
+  // below instead).
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [contextMenuPos, setContextMenuPos] = useState({x: 0, y: 0});
+  // Which candidate's submenu (of the 4 actions) is currently expanded - only meaningful when
+  // rightClickCandidates.length > 1, i.e. there's something to disambiguate. null otherwise.
+  const [expandedCandidateIndex, setExpandedCandidateIndex] = useState(null);
+  // The submenu is positioned independently (via 'fixed', computed from the hovered row's own
+  // bounding rect) rather than CSS-anchored ('absolute; left: 100%') to its candidate <li> - it
+  // needs to render outside the root menu's scrollable list (see contextMenu's overflow-y in
+  // Screenshot.module.css) since setting overflow-y to anything but 'visible' makes overflow-x
+  // compute to 'auto' too (clipping), which was hiding the submenu whenever it CSS-overflowed the
+  // scrollable container instead of the viewport.
+  const [submenuPos, setSubmenuPos] = useState({x: 0, y: 0});
+  const submenuRef = useRef(null);
+  const contextMenuRef = useRef(null);
   const [enterTextModalOpen, setEnterTextModalOpen] = useState(false);
   const [enterTextValue, setEnterTextValue] = useState('');
   const [checkTextModalOpen, setCheckTextModalOpen] = useState(false);
   const [checkTextValue, setCheckTextValue] = useState('');
+  // Tell <SessionInspector> whenever the right-click menu (or a modal opened from it) is up, so
+  // it can skip the periodic auto-refresh tick entirely while the user is interacting with it -
+  // belt-and-braces alongside owning the menu outright above, so a refresh can never land (and
+  // reflow the page) mid-interaction in the first place.
+  useEffect(() => {
+    onContextMenuActiveChange?.(contextMenuOpen || enterTextModalOpen || checkTextModalOpen);
+  }, [contextMenuOpen, enterTextModalOpen, checkTextModalOpen, onContextMenuActiveChange]);
   // The live 'x'/'y' hover state gets reset to null by handleScreenshotLeave as soon as the mouse
-  // leaves the screenshot - which happens the instant the context menu's dropdown overlay appears
-  // (the browser re-targets the pointer to the topmost element, not just when a later modal's OK
-  // button is clicked), well before any menu item can be clicked. So the context menu can't rely
-  // on 'x'/'y' at all - handleScreenshotContextMenu captures the position straight from the
+  // leaves the screenshot - which happens the instant the context menu overlay appears (the
+  // browser re-targets the pointer to the topmost element, not just when a later modal's OK button
+  // is clicked), well before any menu item can be clicked. So the context menu can't rely on
+  // 'x'/'y' at all - handleScreenshotContextMenu captures the position straight from the
   // right-click event itself into this ref, which every context menu action reads instead.
   const rightClickCoordsRef = useRef(null);
   // Which specific element (by page-source id) a context menu action should target, when more
@@ -70,7 +100,18 @@ const Screenshot = (props) => {
   // drives what the context menu itself renders, not just what a later action call uses.
   const [rightClickCandidates, setRightClickCandidates] = useState([]);
 
+  // The right-click menu (Flutter driver sessions only) is only meaningful while tracking a
+  // tap/swipe coordinate, since its actions rely on rightClickCoordsRef being populated by
+  // handleScreenshotContextMenu below
+  const canUseFlutterContextMenu =
+    automationName === DRIVERS.FLUTTER && screenshotInteractionMode === TAP_SWIPE;
+
   const handleScreenshotContextMenu = (e) => {
+    if (!canUseFlutterContextMenu) {
+      // Let the browser's native context menu show, same as before this feature existed
+      return;
+    }
+    e.preventDefault();
     const point = {
       x: Math.round(e.nativeEvent.offsetX * scaleRatio),
       y: Math.round(e.nativeEvent.offsetY * scaleRatio),
@@ -78,7 +119,119 @@ const Screenshot = (props) => {
     rightClickCoordsRef.current = point;
     selectedElementIdRef.current = undefined;
     setRightClickCandidates(findAllElementsAtPoint(sourceJSON, point.x, point.y));
+    setExpandedCandidateIndex(null);
+    setContextMenuPos({x: e.clientX, y: e.clientY});
+    setContextMenuOpen(true);
   };
+
+  // Close on any click outside the menu, or on Escape - the menu's own item clicks close it
+  // themselves (see runContextMenuAction) before this would even run.
+  useEffect(() => {
+    if (!contextMenuOpen) {
+      return;
+    }
+    const handlePointerDown = (e) => {
+      // The submenu renders as a sibling of contextMenuRef's own element (not nested inside it -
+      // see submenuPos's declaration for why), so it needs its own inclusion check here too.
+      if (!contextMenuRef.current?.contains(e.target) && !submenuRef.current?.contains(e.target)) {
+        setContextMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setContextMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown, true);
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown, true);
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [contextMenuOpen]);
+
+  // Keep the menu fully within the viewport - antd's Dropdown did this automatically
+  // (autoAdjustOverflow); replicate the common case now that positioning is manual.
+  useLayoutEffect(() => {
+    if (!contextMenuOpen || !contextMenuRef.current) {
+      return;
+    }
+    const rect = contextMenuRef.current.getBoundingClientRect();
+    const overflowX = rect.right - window.innerWidth;
+    const overflowY = rect.bottom - window.innerHeight;
+    if (overflowX > 0 || overflowY > 0) {
+      setContextMenuPos((pos) => ({
+        x: overflowX > 0 ? Math.max(0, pos.x - overflowX) : pos.x,
+        y: overflowY > 0 ? Math.max(0, pos.y - overflowY) : pos.y,
+      }));
+    }
+    // Only re-run when the menu just opened or its content changed shape (candidate count) -
+    // not on every contextMenuPos update, which this effect itself may cause
+  }, [contextMenuOpen, rightClickCandidates.length]);
+
+  const handleCandidateMouseEnter = (index, e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setSubmenuPos({x: rect.right, y: rect.top});
+    setExpandedCandidateIndex(index);
+  };
+
+  // Same rationale as the root menu's clamp above - keep the submenu within the viewport too,
+  // since it's no longer CSS-anchored to its candidate row (see submenuPos's declaration).
+  useLayoutEffect(() => {
+    if (expandedCandidateIndex === null || !submenuRef.current) {
+      return;
+    }
+    const rect = submenuRef.current.getBoundingClientRect();
+    const overflowX = rect.right - window.innerWidth;
+    const overflowY = rect.bottom - window.innerHeight;
+    if (overflowX > 0 || overflowY > 0) {
+      setSubmenuPos((pos) => ({
+        x: overflowX > 0 ? Math.max(0, pos.x - overflowX) : pos.x,
+        y: overflowY > 0 ? Math.max(0, pos.y - overflowY) : pos.y,
+      }));
+    }
+    // Only re-run when the submenu just opened for a (possibly different) candidate - not on
+    // every submenuPos update, which this effect itself may cause
+  }, [expandedCandidateIndex]);
+
+  // The context menu actions, common to the flat (0-1 candidate) and per-candidate
+  // (>1 candidates) menu shapes below.
+  const contextMenuActions = [
+    {key: 'tap', label: t('tapMenuItem')},
+    {key: 'verifyElementExists', label: t('verifyElementExists')},
+    {key: 'verifyElementDoesNotExist', label: t('verifyElementDoesNotExist')},
+    {key: 'enterText', label: t('enterTextMenuItem')},
+    {key: 'checkText', label: t('checkTextMenuItem')},
+  ];
+
+  const runContextMenuAction = useCallback(
+    (actionKey, elementId) => {
+      setContextMenuOpen(false);
+      const {x: cx, y: cy} = rightClickCoordsRef.current ?? {};
+      switch (actionKey) {
+        case 'tap':
+          tapElementAtCoordinates(cx, cy, elementId);
+          break;
+        case 'verifyElementExists':
+          verifyElementExistsAtCoordinates(cx, cy, true, elementId);
+          break;
+        case 'verifyElementDoesNotExist':
+          verifyElementExistsAtCoordinates(cx, cy, false, elementId);
+          break;
+        case 'enterText':
+          selectedElementIdRef.current = elementId;
+          setEnterTextModalOpen(true);
+          break;
+        case 'checkText':
+          selectedElementIdRef.current = elementId;
+          setCheckTextModalOpen(true);
+          break;
+        default:
+          break;
+      }
+    },
+    [tapElementAtCoordinates, verifyElementExistsAtCoordinates],
+  );
 
   const handleEnterTextOk = async () => {
     setEnterTextModalOpen(false);
@@ -227,160 +380,152 @@ const Screenshot = (props) => {
     : `data:image/gif;base64,${screenshot}`;
   const points = getGestureCoordinates();
 
-  // The right-click menu (Flutter driver sessions only) is only meaningful while tracking a
-  // tap/swipe coordinate, since its actions rely on rightClickCoordsRef being populated by
-  // handleScreenshotContextMenu below
-  const canUseFlutterContextMenu =
-    automationName === DRIVERS.FLUTTER && screenshotInteractionMode === TAP_SWIPE;
-
-  // The four context menu actions, targeting a specific element (by page-source id) when more
-  // than one candidate matched the clicked point - see buildFlutterContextMenuItems below.
-  // 'keyPrefix' keeps antd Menu item keys unique when this is called once per candidate.
-  const buildActionItems = (elementId, keyPrefix = '') => [
-    {
-      key: `${keyPrefix}verifyElementExists`,
-      label: t('verifyElementExists'),
-      onClick: () => {
-        const {x: cx, y: cy} = rightClickCoordsRef.current ?? {};
-        verifyElementExistsAtCoordinates(cx, cy, true, elementId);
-      },
-    },
-    {
-      key: `${keyPrefix}verifyElementDoesNotExist`,
-      label: t('verifyElementDoesNotExist'),
-      onClick: () => {
-        const {x: cx, y: cy} = rightClickCoordsRef.current ?? {};
-        verifyElementExistsAtCoordinates(cx, cy, false, elementId);
-      },
-    },
-    {
-      key: `${keyPrefix}enterText`,
-      label: t('enterTextMenuItem'),
-      onClick: () => {
-        selectedElementIdRef.current = elementId;
-        setEnterTextModalOpen(true);
-      },
-    },
-    {
-      key: `${keyPrefix}checkText`,
-      label: t('checkTextMenuItem'),
-      onClick: () => {
-        selectedElementIdRef.current = elementId;
-        setCheckTextModalOpen(true);
-      },
-    },
-  ];
-
-  // With 0 or 1 candidates, there's nothing to disambiguate - same flat menu as always, and
-  // appium_handler.dart hit-tests the coordinate itself (elementId undefined) exactly like
-  // before this feature existed. With more than one, each candidate becomes its own submenu of
-  // the same four actions, so the user can pick which overlapping widget they meant.
-  const flutterContextMenu = {
-    items:
-      rightClickCandidates.length > 1
-        ? rightClickCandidates.map((element, index) => ({
-            key: `element-${index}`,
-            label: getElementDisplayName(element),
-            children: buildActionItems(element.attributes?.id, `element-${index}-`),
-          }))
-        : buildActionItems(rightClickCandidates[0]?.attributes?.id),
-  };
-
   // Show the screenshot and highlighter rects.
   // Show loading indicator if a method call is in progress, unless using MJPEG mode.
   return (
     <Spin size="large" spinning={!!methodCallInProgress && !isUsingMjpegMode}>
       <div className={styles.innerScreenshotContainer}>
-        <Dropdown
-          menu={flutterContextMenu}
-          trigger={['contextMenu']}
-          disabled={!canUseFlutterContextMenu}
+        <div
+          style={screenshotStyle}
+          onMouseDown={handleScreenshotDown}
+          onMouseUp={handleScreenshotUp}
+          onMouseMove={handleScreenshotCoordsUpdate}
+          onMouseOver={handleScreenshotCoordsUpdate}
+          onMouseLeave={handleScreenshotLeave}
+          onClick={handleScreenshotClick}
+          onContextMenu={handleScreenshotContextMenu}
+          className={inspectorStyles.screenshotBox}
         >
-          <div
-            style={screenshotStyle}
-            onMouseDown={handleScreenshotDown}
-            onMouseUp={handleScreenshotUp}
-            onMouseMove={handleScreenshotCoordsUpdate}
-            onMouseOver={handleScreenshotCoordsUpdate}
-            onMouseLeave={handleScreenshotLeave}
-            onClick={handleScreenshotClick}
-            onContextMenu={handleScreenshotContextMenu}
-            className={inspectorStyles.screenshotBox}
-          >
-            {screenshotInteractionMode !== SELECT && (
-              <div className={styles.coordinatesContainer}>
-                {hoveredElement ? (
-                  <p>
-                    {t('elementAtCoordinates', {element: getElementDisplayName(hoveredElement)})}
-                  </p>
-                ) : (
-                  <>
-                    <p>{t('xCoordinate', {x})}</p>
-                    <p>{t('yCoordinate', {y})}</p>
-                  </>
-                )}
-              </div>
-            )}
-            <img src={screenSrc} id="screenshot" />
-            {screenshotInteractionMode === SELECT && <HighlighterRects {...props} />}
-            {screenshotInteractionMode === TAP_SWIPE && (
-              <svg className={styles.swipeSvg}>
-                {coordStart && (
-                  <circle cx={coordStart.x / scaleRatio} cy={coordStart.y / scaleRatio} r={10} />
-                )}
-                {coordStart && !coordEnd && (
-                  <line
-                    x1={coordStart.x / scaleRatio}
-                    y1={coordStart.y / scaleRatio}
-                    x2={x / scaleRatio}
-                    y2={y / scaleRatio}
-                  />
-                )}
-                {coordStart && coordEnd && (
-                  <line
-                    x1={coordStart.x / scaleRatio}
-                    y1={coordStart.y / scaleRatio}
-                    x2={coordEnd.x / scaleRatio}
-                    y2={coordEnd.y / scaleRatio}
-                  />
-                )}
-              </svg>
-            )}
-            {selectedInspectorTab === INSPECTOR_TABS.GESTURES && points && (
-              <svg key="gestureSVG" className={styles.gestureSvg}>
-                {points.map((pointer) =>
-                  pointer.map((tick, index) => (
-                    <Fragment key={tick.id}>
-                      {index > 0 && (
-                        <line
-                          className={styles[tick.type]}
-                          key={`${tick.id}.line`}
-                          x1={pointer[index - 1].x / scaleRatio}
-                          y1={pointer[index - 1].y / scaleRatio}
-                          x2={tick.x / scaleRatio}
-                          y2={tick.y / scaleRatio}
-                          style={{stroke: tick.color}}
-                        />
-                      )}
-                      <circle
-                        className={styles[`${tick.type}Circle`]}
-                        key={`${tick.id}.circle`}
-                        cx={tick.x / scaleRatio}
-                        cy={tick.y / scaleRatio}
-                        r={8}
-                        style={
-                          tick.type === GESTURE_ITEM_STYLES.FILLED
-                            ? {fill: tick.color}
-                            : {stroke: tick.color}
-                        }
+          {screenshotInteractionMode !== SELECT && (
+            <div className={styles.coordinatesContainer}>
+              {hoveredElement ? (
+                <p>{t('elementAtCoordinates', {element: getElementDisplayName(hoveredElement)})}</p>
+              ) : (
+                <>
+                  <p>{t('xCoordinate', {x})}</p>
+                  <p>{t('yCoordinate', {y})}</p>
+                </>
+              )}
+            </div>
+          )}
+          <img src={screenSrc} id="screenshot" />
+          {screenshotInteractionMode === SELECT && <HighlighterRects {...props} />}
+          {screenshotInteractionMode === TAP_SWIPE && (
+            <svg className={styles.swipeSvg}>
+              {coordStart && (
+                <circle cx={coordStart.x / scaleRatio} cy={coordStart.y / scaleRatio} r={10} />
+              )}
+              {coordStart && !coordEnd && (
+                <line
+                  x1={coordStart.x / scaleRatio}
+                  y1={coordStart.y / scaleRatio}
+                  x2={x / scaleRatio}
+                  y2={y / scaleRatio}
+                />
+              )}
+              {coordStart && coordEnd && (
+                <line
+                  x1={coordStart.x / scaleRatio}
+                  y1={coordStart.y / scaleRatio}
+                  x2={coordEnd.x / scaleRatio}
+                  y2={coordEnd.y / scaleRatio}
+                />
+              )}
+            </svg>
+          )}
+          {selectedInspectorTab === INSPECTOR_TABS.GESTURES && points && (
+            <svg key="gestureSVG" className={styles.gestureSvg}>
+              {points.map((pointer) =>
+                pointer.map((tick, index) => (
+                  <Fragment key={tick.id}>
+                    {index > 0 && (
+                      <line
+                        className={styles[tick.type]}
+                        key={`${tick.id}.line`}
+                        x1={pointer[index - 1].x / scaleRatio}
+                        y1={pointer[index - 1].y / scaleRatio}
+                        x2={tick.x / scaleRatio}
+                        y2={tick.y / scaleRatio}
+                        style={{stroke: tick.color}}
                       />
-                    </Fragment>
-                  )),
-                )}
-              </svg>
-            )}
+                    )}
+                    <circle
+                      className={styles[`${tick.type}Circle`]}
+                      key={`${tick.id}.circle`}
+                      cx={tick.x / scaleRatio}
+                      cy={tick.y / scaleRatio}
+                      r={8}
+                      style={
+                        tick.type === GESTURE_ITEM_STYLES.FILLED
+                          ? {fill: tick.color}
+                          : {stroke: tick.color}
+                      }
+                    />
+                  </Fragment>
+                )),
+              )}
+            </svg>
+          )}
+        </div>
+        {contextMenuOpen && (
+          <div
+            ref={contextMenuRef}
+            className={styles.contextMenu}
+            style={{left: contextMenuPos.x, top: contextMenuPos.y}}
+          >
+            <ul className={styles.contextMenuList}>
+              {rightClickCandidates.length <= 1
+                ? contextMenuActions.map((action) => (
+                    <li
+                      key={action.key}
+                      className={styles.contextMenuItem}
+                      // False positive below: only reads/writes ref .current from inside this
+                      // onClick handler, never during render (see the structurally-equivalent,
+                      // unflagged call in the >1-candidate branch below) - a known limitation of
+                      // this preview rule with 0/1-length conditional branches.
+                      // prettier-ignore
+                      // eslint-disable-next-line react-hooks/refs
+                      onClick={() => runContextMenuAction(action.key, rightClickCandidates[0]?.attributes?.id)}
+                    >
+                      {action.label}
+                    </li>
+                  ))
+                : rightClickCandidates.map((element, index) => (
+                    <li
+                      key={element.attributes?.id ?? index}
+                      className={styles.contextMenuItem}
+                      onMouseEnter={(e) => handleCandidateMouseEnter(index, e)}
+                    >
+                      {getElementDisplayName(element)}
+                    </li>
+                  ))}
+            </ul>
           </div>
-        </Dropdown>
+        )}
+        {contextMenuOpen &&
+          expandedCandidateIndex !== null &&
+          rightClickCandidates[expandedCandidateIndex] && (
+            <ul
+              ref={submenuRef}
+              className={`${styles.contextMenuList} ${styles.contextSubmenuList}`}
+              style={{left: submenuPos.x, top: submenuPos.y}}
+            >
+              {contextMenuActions.map((action) => (
+                <li
+                  key={action.key}
+                  className={styles.contextMenuItem}
+                  onClick={() =>
+                    runContextMenuAction(
+                      action.key,
+                      rightClickCandidates[expandedCandidateIndex].attributes?.id,
+                    )
+                  }
+                >
+                  {action.label}
+                </li>
+              ))}
+            </ul>
+          )}
         <Modal
           title={t('enterTextModalTitle')}
           open={enterTextModalOpen}

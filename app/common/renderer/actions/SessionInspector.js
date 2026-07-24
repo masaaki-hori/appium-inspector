@@ -5,7 +5,13 @@ import {SAVED_CLIENT_FRAMEWORK, SET_SAVED_GESTURES} from '../../shared/setting-d
 import {DRIVERS} from '../constants/common.js';
 import {POINTER_TYPES} from '../constants/gestures.js';
 import {DEFAULT_TAP, SCREENSHOT_INTERACTION_MODE} from '../constants/screenshot.js';
-import {APP_MODE, NATIVE_APP, UNKNOWN_ERROR} from '../constants/session-inspector.js';
+import {
+  APP_MODE,
+  FLUTTER_CONTEXT,
+  NATIVE_APP,
+  SCREENSHOT_SCALE_REFRESH_EVENT,
+  UNKNOWN_ERROR,
+} from '../constants/session-inspector.js';
 import i18n from '../i18next.js';
 import InspectorDriver from '../lib/appium/inspector-driver.js';
 import {CLIENT_FRAMEWORK_MAP} from '../lib/client-frameworks/map.js';
@@ -260,7 +266,13 @@ export function applyClientMethod(params) {
         windowSizeError,
       });
     }
-    window.dispatchEvent(new Event('resize'));
+    // Ask <SessionInspector> to recompute the screenshot's scale ratio/container width, since
+    // this call may have changed the screenshot's rendered dimensions (new image, orientation
+    // change, etc.). This intentionally is NOT a real 'resize' event: third-party popup libraries
+    // (e.g. antd's Dropdown, for the Flutter right-click context menu in Screenshot.jsx) also
+    // listen for window resize and auto-close on it, which was silently closing that menu/any
+    // open modal on every periodic auto-refresh tick (see SCREENSHOT_SCALE_REFRESH_EVENT usage).
+    window.dispatchEvent(new Event(SCREENSHOT_SCALE_REFRESH_EVENT));
     return commandRes;
   };
 }
@@ -747,12 +759,27 @@ export function setRefreshingState(refreshStates) {
 
 export function selectAppMode(mode) {
   return async (dispatch, getState) => {
-    const {appMode} = getState().inspector;
+    const {appMode, automationName} = getState().inspector;
     dispatch({type: SET_APP_MODE, mode});
-    // if we're transitioning to hybrid mode, do a pre-emptive search for contexts
     if (appMode !== mode && mode === APP_MODE.WEB_HYBRID) {
-      const action = applyClientMethod({methodName: 'getPageSource'});
-      await action(dispatch, getState);
+      if (automationName === DRIVERS.FLUTTER) {
+        // A Flutter driver session has no real WebView-hybrid concept to search for - this
+        // button is repurposed as "leave the native OS layer switched to by NATIVE app mode
+        // below, and resume driving the Flutter widget tree", so just switch back to the
+        // FLUTTER context directly. The generic getPageSource path this used to take instead
+        // triggers a WebView-context HTML-tagging script injection ('execute/sync') that the
+        // Flutter driver doesn't support - it errored, and left later getContexts() calls
+        // reporting only FLUTTER (losing NATIVE_APP as a selectable context) as a side effect.
+        const action = applyClientMethod({
+          methodName: 'switchAppiumContext',
+          args: [FLUTTER_CONTEXT],
+        });
+        await action(dispatch, getState);
+      } else {
+        // if we're transitioning to hybrid mode, do a pre-emptive search for contexts
+        const action = applyClientMethod({methodName: 'getPageSource'});
+        await action(dispatch, getState);
+      }
     }
     if (appMode !== mode && mode === APP_MODE.NATIVE) {
       const action = applyClientMethod({methodName: 'switchAppiumContext', args: [NATIVE_APP]});
@@ -1143,6 +1170,52 @@ export function toggleAutoSessionRestart() {
   return (dispatch, getState) => {
     const autoSessionRestart = !getState().inspector.autoSessionRestart;
     dispatch({type: SET_AUTO_SESSION_RESTART, autoSessionRestart});
+  };
+}
+
+/**
+ * Taps the widget at the given point of a Flutter driver session, using 'appium_handler.dart's
+ * 'tap' performActions handling - the disambiguation-aware counterpart to 'tapAtCoordinates'
+ * (which always hit-tests the coordinate itself). Same local pre-check and rationale as
+ * 'verifyElementExistsAtCoordinates' for avoiding appium_handler.dart's non-null assertion crash
+ * on an empty hit-test, and the same 'elementId' disambiguation escape hatch.
+ *
+ * If recording, the resolved locator is attached to the just-recorded action (see
+ * 'RECORD_FLUTTER_FINDER'), same as 'tapAtCoordinates'.
+ *
+ * @param {string} [elementId] see 'verifyElementExistsAtCoordinates'
+ */
+export function tapElementAtCoordinates(x, y, elementId) {
+  return async (dispatch, getState) => {
+    const {sourceJSON, isRecording} = getState().inspector;
+    if (!elementId && !findElementAtPoint(sourceJSON, x, y)) {
+      notification.error({title: i18n.t('noElementFoundAtPosition')});
+      return;
+    }
+
+    const {POINTER_NAME, DURATION_1} = DEFAULT_TAP;
+    const tapAction = applyClientMethod({
+      methodName: SCREENSHOT_INTERACTION_MODE.TAP,
+      args: [
+        {
+          [POINTER_NAME]: [
+            {type: POINTER_TYPES.POINTER_MOVE, duration: DURATION_1, x, y},
+            {type: SCREENSHOT_INTERACTION_MODE.TAP, elementId},
+          ],
+        },
+      ],
+    });
+    const commandRes = await tapAction(dispatch, getState);
+    const flutterFinder = parseFlutterFinderFromResponse(commandRes);
+
+    if (!flutterFinder) {
+      notification.error({title: i18n.t('couldNotResolveElementLocator')});
+      return;
+    }
+
+    if (isRecording) {
+      dispatch({type: RECORD_FLUTTER_FINDER, flutterFinder});
+    }
   };
 }
 
