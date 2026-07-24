@@ -142,6 +142,7 @@
   "xCoordinate": "X: {{x}}",
   "yCoordinate": "Y: {{y}}",
   "elementAtCoordinates": "Element: {{element}}",
+  "tapMenuItem": "Tap",
   "verifyElementExists": "Verify Element Exists",
   "verifyElementDoesNotExist": "Verify Element Does Not Exist",
   "noElementFoundAtPosition": "No element found at this position",
