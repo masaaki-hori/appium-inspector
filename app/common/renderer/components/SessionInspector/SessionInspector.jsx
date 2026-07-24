@@ -1,18 +1,6 @@
-import {
-  IconCrosshair,
-  IconDownload,
-  IconEyePlus,
-  IconMovie,
-  IconObjectScan,
-  IconPhoto,
-} from '@tabler/icons-react';
-import {Button, Modal, Space, Spin, Tabs, Tooltip} from 'antd';
-import _ from 'lodash';
-import {useCallback, useEffect, useRef, useState} from 'react';
-import {useTranslation} from 'react-i18next';
+import {useCallback, useEffect} from 'react';
 import {useNavigate} from 'react-router';
 
-import {BUTTON} from '../../constants/antd-types.js';
 import {WINDOW_DIMENSIONS} from '../../constants/common.js';
 import {SCREENSHOT_INTERACTION_MODE} from '../../constants/screenshot.js';
 import {
@@ -27,13 +15,10 @@ import Commands from './CommandsTab/Commands.jsx';
 import GestureEditor from './GesturesTab/GestureEditor.jsx';
 import SavedGestures from './GesturesTab/SavedGestures.jsx';
 import HeaderButtons from './Header/HeaderButtons.jsx';
-import Recorder from './RecorderTab/Recorder.jsx';
 import Screenshot from './Screenshot/Screenshot.jsx';
-import SessionInfo from './SessionInfoTab/SessionInfo.jsx';
+import SessionExpiryModal from './SessionExpiryModal.jsx';
 import styles from './SessionInspector.module.css';
-import SourceTab from './SourceTab/SourceTab.jsx';
-
-const {SELECT, TAP_SWIPE} = SCREENSHOT_INTERACTION_MODE;
+import SessionInspectorTabs from './SessionInspectorTabs.jsx';
 
 // resize width to something sensible for using the inspector on first run
 const resizeWindowOnLaunch = () => {
@@ -48,33 +33,20 @@ const resizeWindowOnLaunch = () => {
   }
 };
 
-const downloadScreenshot = (screenshot) => {
-  const href = `data:image/png;base64,${screenshot}`;
-  const filename = `appium-inspector-${new Date().toJSON()}.png`;
-  downloadFile(href, filename);
-};
-
+/**
+ * The root component of the Session Inspector screen.
+ */
 const Inspector = (props) => {
   const {
     screenshot,
     screenshotError,
+    isUsingMjpegMode,
+    isAwaitingMjpegStream,
+    isSourceRefreshOn,
     quitSession,
-    screenshotInteractionMode,
-    selectedInspectorTab,
-    selectInspectorTab,
     setUserWaitTimeout,
     showKeepAlivePrompt,
     keepSessionAlive,
-    serverDetails,
-    isUsingMjpegMode,
-    setMjpegState,
-    isAwaitingMjpegStream,
-    setRefreshingState,
-    toggleShowCentroids,
-    showCentroids,
-    isGestureEditorVisible,
-    isSourceRefreshOn,
-    windowSize,
     applyClientMethod,
     getSavedClientFramework,
     runKeepAliveLoop,
@@ -116,8 +88,11 @@ const Inspector = (props) => {
   // driver's VM service screenshot call flaking). Unmounting on every such hiccup was destroying
   // the right-click context menu/modal state that lives inside <Screenshot>. The error, if any,
   // still renders alongside the (now possibly stale) screenshot - see the JSX below.
+  //const showScreenshot =
+  //  !!screenshot || (isUsingMjpegMode && (!isSourceRefreshOn || !isAwaitingMjpegStream));
   const showScreenshot =
-    !!screenshot || (isUsingMjpegMode && (!isSourceRefreshOn || !isAwaitingMjpegStream));
+    (screenshot && !screenshotError) ||
+    (isUsingMjpegMode && (!isSourceRefreshOn || !isAwaitingMjpegStream));
 
   const updateScreenshotScale = useCallback(() => {
     // If the screenshot has too much space to the right or bottom, adjust the max width
@@ -434,18 +409,17 @@ const Inspector = (props) => {
 
   return (
     <div className={styles.inspectorContainer}>
-      <HeaderButtons quitSessionAndReturn={quitSessionAndReturn} {...props} />
-      {main}
-      <Modal
-        title={t('Session Inactive')}
-        open={showKeepAlivePrompt}
-        onOk={() => keepSessionAlive()}
-        onCancel={() => quitSessionAndReturn()}
-        okText={t('Keep Session Running')}
-        cancelText={t('Quit Session')}
-      >
-        <p>{t('Your session is about to expire')}</p>
-      </Modal>
+      <HeaderButtons {...props} quitSessionAndReturn={quitSessionAndReturn} />
+      <div className={styles.inspectorMain}>
+        <Screenshot {...props} showScreenshot={showScreenshot} />
+        <SessionInspectorTabs {...props} showScreenshot={showScreenshot} />
+      </div>
+      <SessionExpiryModal
+        showKeepAlivePrompt={showKeepAlivePrompt}
+        keepSessionAlive={keepSessionAlive}
+        quitSessionAndReturn={quitSessionAndReturn}
+        setUserWaitTimeout={setUserWaitTimeout}
+      />
     </div>
   );
 };

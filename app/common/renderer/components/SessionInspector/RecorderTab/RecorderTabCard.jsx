@@ -1,6 +1,5 @@
 import {IconEraser, IconEyeCode, IconFiles, IconVideo} from '@tabler/icons-react';
 import {Button, Card, Flex, Select, Space, Tooltip} from 'antd';
-import _ from 'lodash';
 import {useTranslation} from 'react-i18next';
 
 import {BUTTON} from '../../../constants/antd-types.js';
@@ -11,7 +10,7 @@ import inspectorStyles from '../SessionInspector.module.css';
 /**
  * Title of the recorder tab card.
  */
-const RecorderPanelTitle = () => {
+const RecorderTabTitle = () => {
   const {t} = useTranslation();
 
   return (
@@ -25,7 +24,7 @@ const RecorderPanelTitle = () => {
 /**
  * Header action options for the recorded code.
  */
-const RecorderHeaderButtons = ({
+const RecorderTabHeaderButtons = ({
   clientFramework,
   clientCode,
   recordedActions,
@@ -60,7 +59,7 @@ const RecorderHeaderButtons = ({
         value={clientFramework}
         onChange={setClientFramework}
         className={inspectorStyles.frameworkDropdown}
-        options={_.map(CLIENT_FRAMEWORK_MAP, (fwClass, fwId) => ({
+        options={Object.entries(CLIENT_FRAMEWORK_MAP).map(([fwId, fwClass]) => ({
           value: fwId,
           label: fwClass.readableName,
         }))}
@@ -72,7 +71,7 @@ const RecorderHeaderButtons = ({
 /**
  * Wrapper card for the recorder tab.
  */
-const RecorderCard = ({
+const RecorderTabCard = ({
   children,
   clientFramework,
   clientCode,
@@ -83,10 +82,10 @@ const RecorderCard = ({
   clearRecording,
 }) => (
   <Card
-    title={<RecorderPanelTitle />}
+    title={<RecorderTabTitle />}
     className={inspectorStyles.interactionTabCard}
     extra={
-      <RecorderHeaderButtons
+      <RecorderTabHeaderButtons
         clientFramework={clientFramework}
         clientCode={clientCode}
         recordedActions={recordedActions}
@@ -101,4 +100,4 @@ const RecorderCard = ({
   </Card>
 );
 
-export default RecorderCard;
+export default RecorderTabCard;
