@@ -4,11 +4,7 @@ import {useTranslation} from 'react-i18next';
 
 import {DRIVERS} from '../../../constants/common.js';
 import {POINTER_TYPES} from '../../../constants/gestures.js';
-import {
-  DEFAULT_SWIPE,
-  DEFAULT_TAP,
-  SCREENSHOT_INTERACTION_MODE,
-} from '../../../constants/screenshot.js';
+import {DEFAULT_SWIPE, SCREENSHOT_INTERACTION_MODE} from '../../../constants/screenshot.js';
 import {INSPECTOR_TABS} from '../../../constants/session-inspector.js';
 import {findAllElementsAtPoint, getElementDisplayName} from '../../../utils/element-hit-testing.js';
 import CoordinatesContainer from './Overlays/CoordinatesContainer.jsx';
@@ -17,25 +13,8 @@ import GestureTrail from './Overlays/GestureTrail.jsx';
 import TapSwipeTrail from './Overlays/TapSwipeTrail.jsx';
 import styles from './Screenshot.module.css';
 
-const {POINTER_UP, POINTER_DOWN, PAUSE, POINTER_MOVE} = POINTER_TYPES;
-const {TAP, SELECT, SWIPE, TAP_SWIPE} = SCREENSHOT_INTERACTION_MODE;
-
-const handleTapOnScreenshot = async (tapPoint, applyClientMethod) => {
-  const {POINTER_NAME, DURATION_1, DURATION_2, BUTTON} = DEFAULT_TAP;
-  await applyClientMethod({
-    methodName: TAP,
-    args: [
-      {
-        [POINTER_NAME]: [
-          {type: POINTER_MOVE, duration: DURATION_1, x: tapPoint.x, y: tapPoint.y},
-          {type: POINTER_DOWN, button: BUTTON},
-          {type: PAUSE, duration: DURATION_2},
-          {type: POINTER_UP, button: BUTTON},
-        ],
-      },
-    ],
-  });
-};
+const {POINTER_UP, POINTER_DOWN, POINTER_MOVE} = POINTER_TYPES;
+const {SELECT, SWIPE, TAP_SWIPE} = SCREENSHOT_INTERACTION_MODE;
 
 const handleSwipeOnScreenshot = async (swipeStartPoint, swipeEndPoint, applyClientMethod) => {
   const {POINTER_NAME, DURATION_1, DURATION_2, BUTTON, ORIGIN} = DEFAULT_SWIPE;
@@ -82,6 +61,7 @@ const ScreenshotImgWithOverlays = (props) => {
     applyClientMethod,
     sourceJSON,
     automationName,
+    tapAtCoordinates,
     tapElementAtCoordinates,
     verifyElementExistsAtCoordinates,
     enterTextAtCoordinates,
@@ -321,7 +301,11 @@ const ScreenshotImgWithOverlays = (props) => {
     }
     await setCoordEnd(x, y);
     if (Math.abs(coordStart.x - x) < 5 && Math.abs(coordStart.y - y) < 5) {
-      await handleTapOnScreenshot({x, y}, applyClientMethod);
+      // Resolves to a locator-based tap when possible (see 'tapAtCoordinates') rather than
+      // always sending a raw coordinate tap - required for a Flutter session's tap to come back
+      // tagged with the widget locator the driver resolved, so the recorder/generated code can
+      // refer to it by name instead of by raw x/y
+      await tapAtCoordinates(x, y);
     } else {
       await handleSwipeOnScreenshot(coordStart, {x, y}, applyClientMethod);
     }

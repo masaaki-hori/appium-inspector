@@ -123,6 +123,101 @@ describe('utils/element-hit-testing.js', function () {
     it('should return an empty array when given no source', function () {
       expect(findAllElementsAtPoint(null, 10, 10)).toEqual([]);
     });
+
+    it('should collapse a run of same-bounds pass-through ancestors into the most specific one', function () {
+      // Semantics/RepaintBoundary-like wrappers: identical bounds to Button, all the way up to
+      // MediaQuery, which is the first ancestor that actually differs in size (full screen)
+      const source = {
+        tagName: 'Scaffold',
+        path: '',
+        attributes: {x: '0', y: '0', width: '200', height: '200'},
+        children: [
+          {
+            tagName: 'MediaQuery',
+            path: '0',
+            attributes: {x: '0', y: '0', width: '200', height: '200'},
+            children: [
+              {
+                tagName: 'RepaintBoundary',
+                path: '0.0',
+                attributes: {x: '10', y: '10', width: '50', height: '50'},
+                children: [
+                  {
+                    tagName: 'Semantics',
+                    path: '0.0.0',
+                    attributes: {x: '10', y: '10', width: '50', height: '50'},
+                    children: [
+                      {
+                        tagName: 'Button',
+                        path: '0.0.0.0',
+                        attributes: {
+                          x: '10',
+                          y: '10',
+                          width: '50',
+                          height: '50',
+                          text: 'Login',
+                        },
+                        children: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const matches = findAllElementsAtPoint(source, 20, 20);
+      // Semantics and RepaintBoundary share Button's exact bounds and are its ancestors, so
+      // both collapse into it; MediaQuery differs in size (full screen) and is kept
+      expect(matches.map((element) => element.path)).toEqual(['0.0.0.0', '0']);
+    });
+
+    it('should prefer a same-bounds named ancestor over an unnamed, more specific descendant', function () {
+      // Button (the deepest match) has no identifying attribute of its own; the Semantics
+      // wrapper directly above it, sharing its exact bounds, carries a semanticLabel. Losing
+      // that wrapper to collapsing would leave a widget only findable by its own coordinates,
+      // even though nothing else at that point was actually more specific spatially.
+      const source = {
+        tagName: 'Scaffold',
+        path: '',
+        attributes: {x: '0', y: '0', width: '200', height: '200'},
+        children: [
+          {
+            tagName: 'RepaintBoundary',
+            path: '0',
+            attributes: {x: '10', y: '10', width: '50', height: '50'},
+            children: [
+              {
+                tagName: 'Semantics',
+                path: '0.0',
+                attributes: {x: '10', y: '10', width: '50', height: '50', semanticLabel: 'Login'},
+                children: [
+                  {
+                    tagName: 'Button',
+                    path: '0.0.0',
+                    attributes: {x: '10', y: '10', width: '50', height: '50'},
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const matches = findAllElementsAtPoint(source, 20, 20);
+      expect(matches.map((element) => element.path)).toEqual(['0.0']);
+    });
+
+    it('should not collapse an ancestor whose bounds differ from its descendant', function () {
+      const matches = findAllElementsAtPoint(buildNestedSource(), 20, 20);
+      expect(matches.map((element) => element.path)).toEqual(['0.0', '0']);
+    });
+
+    it('should not collapse siblings that share identical bounds, even though a naive bounds-only check would', function () {
+      const matches = findAllElementsAtPoint(buildOverlappingSource(), 5, 5);
+      expect(matches.map((element) => element.path)).toEqual(['1', '0']);
+    });
   });
 
   describe('#getElementDisplayName', function () {
