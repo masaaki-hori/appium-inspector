@@ -177,7 +177,7 @@ export default class InspectorDriver {
     const {
       client: {capabilities},
     } = this.driver;
-    return _.toLower(capabilities?.automationName) === 'flutter';
+    return (capabilities?.automationName ?? '').toString().toLowerCase() === 'flutter';
   }
 
   async handleRefresh(skipScreenshot, appMode) {

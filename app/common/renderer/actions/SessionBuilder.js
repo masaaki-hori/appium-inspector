@@ -373,7 +373,9 @@ export function newSession(originalCaps, attachSessId = null) {
           await driver.navigateTo('https://appium.io');
         } catch {}
       }
-    } else if (_.toLower(driver.capabilities.automationName) === DRIVERS.FLUTTER) {
+    } else if (
+      (driver.capabilities.automationName ?? '').toString().toLowerCase() === DRIVERS.FLUTTER
+    ) {
       // A Flutter driver session actually begins in its own 'FLUTTER' context, not NATIVE_APP -
       // unlike every other driver, which starts native. WEB_HYBRID is repurposed as "not in the
       // native OS layer" for Flutter sessions (see 'selectAppMode'/'handleRefresh'), so start
