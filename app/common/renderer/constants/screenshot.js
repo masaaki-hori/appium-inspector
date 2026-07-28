@@ -1,5 +1,6 @@
 // Screenshot interaction modes
 // TAP_SWIPE refers to both TAP and SWIPE
+// TAP_ELEMENT refers to tapping an element highlighter to both select and tap it in one action
 // GESTURE refers to playback via gesture editor
 // CHECK_EXISTENCE, ENTER_TEXT and CHECK_TEXT are Flutter-only actions (right-click, in
 // TAP_SWIPE mode) - see 'appium_handler.dart's 'checkExistence'/'enterText'/'checkText'
@@ -10,6 +11,7 @@ export const SCREENSHOT_INTERACTION_MODE = {
   SWIPE: 'swipe',
   TAP: 'tap',
   TAP_SWIPE: 'tap_swipe',
+  TAP_ELEMENT: 'tap_element',
   GESTURE: 'gesture',
   CHECK_EXISTENCE: 'checkExistence',
   ENTER_TEXT: 'enterText',
