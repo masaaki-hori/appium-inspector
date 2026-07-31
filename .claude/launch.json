@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "appium-inspector-browser",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:browser"],
+      "port": 5173
+    }
+  ]
+}

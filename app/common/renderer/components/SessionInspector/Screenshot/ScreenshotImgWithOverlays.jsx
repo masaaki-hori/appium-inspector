@@ -97,8 +97,10 @@ const ScreenshotImgWithOverlays = (props) => {
   const contextMenuRef = useRef(null);
   const [enterTextModalOpen, setEnterTextModalOpen] = useState(false);
   const [enterTextValue, setEnterTextValue] = useState('');
+  const enterTextInputRef = useRef(null);
   const [checkTextModalOpen, setCheckTextModalOpen] = useState(false);
   const [checkTextValue, setCheckTextValue] = useState('');
+  const checkTextInputRef = useRef(null);
   // Tell <SessionInspector> whenever the right-click menu (or a modal opened from it) is up, so
   // it can skip the periodic auto-refresh tick entirely while the user is interacting with it -
   // belt-and-braces alongside owning the menu outright above, so a refresh can never land (and
@@ -400,7 +402,16 @@ const ScreenshotImgWithOverlays = (props) => {
                 : rightClickCandidates.map((element, index) => (
                     <li
                       key={element.attributes?.id ?? index}
-                      className={styles.contextMenuItem}
+                      // The submenu renders as a sibling positioned over to the side (see
+                      // submenuPos above), so hovering into it moves the mouse off this <li> and
+                      // CSS ':hover' alone would drop the highlight here, leaving no visual trace
+                      // of which candidate the open submenu belongs to. Mirror ':hover' via this
+                      // class while its submenu is the one expanded, independent of actual hover.
+                      className={
+                        index === expandedCandidateIndex
+                          ? `${styles.contextMenuItem} ${styles.contextMenuItemActive}`
+                          : styles.contextMenuItem
+                      }
                       onMouseEnter={(e) => handleCandidateMouseEnter(index, e)}
                     >
                       {getElementDisplayName(element)}
@@ -438,8 +449,17 @@ const ScreenshotImgWithOverlays = (props) => {
           open={enterTextModalOpen}
           onOk={handleEnterTextOk}
           onCancel={() => setEnterTextModalOpen(false)}
+          // The Input stays mounted while the modal is merely hidden (no destroyOnHidden), so a
+          // plain 'autoFocus' prop on it would only ever fire once, on first mount - use this
+          // instead to (re)focus every time the modal actually finishes opening.
+          afterOpenChange={(isOpen) => {
+            if (isOpen) {
+              enterTextInputRef.current?.focus();
+            }
+          }}
         >
           <Input
+            ref={enterTextInputRef}
             placeholder={t('enterTextInputPlaceholder')}
             value={enterTextValue}
             onChange={(e) => setEnterTextValue(e.target.value)}
@@ -451,8 +471,14 @@ const ScreenshotImgWithOverlays = (props) => {
           open={checkTextModalOpen}
           onOk={handleCheckTextOk}
           onCancel={() => setCheckTextModalOpen(false)}
+          afterOpenChange={(isOpen) => {
+            if (isOpen) {
+              checkTextInputRef.current?.focus();
+            }
+          }}
         >
           <Input
+            ref={checkTextInputRef}
             placeholder={t('checkTextInputPlaceholder')}
             value={checkTextValue}
             onChange={(e) => setCheckTextValue(e.target.value)}
