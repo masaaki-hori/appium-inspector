@@ -25,12 +25,7 @@ describe('lib/client-frameworks/dart-*.js', function () {
         framework.actions = [
           {
             action: 'tap',
-            params: [
-              undefined,
-              undefined,
-              TAP_POINTER_ACTIONS,
-              {foundBy: 'byValueKey', value: 'login-button'},
-            ],
+            params: [undefined, undefined, TAP_POINTER_ACTIONS, {foundBy: 'byValueKey', value: 'login-button'}],
           },
         ];
         const code = framework.getCodeString();
@@ -51,9 +46,7 @@ describe('lib/client-frameworks/dart-*.js', function () {
         const framework = new FrameworkClass();
         framework.actions = [{action: 'installApp', params: [undefined, undefined, 'app.apk']}];
         const code = framework.getCodeString();
-        expect(code).toContain(
-          "Code generation for action 'installApp' is not currently supported",
-        );
+        expect(code).toContain("Code generation for action 'installApp' is not currently supported");
       });
 
       it('should render a findsOneWidget assertion when a widget should exist', function () {
@@ -92,13 +85,9 @@ describe('lib/client-frameworks/dart-*.js', function () {
 
       it('should comment out an existence check when no Flutter finder was resolved', function () {
         const framework = new FrameworkClass();
-        framework.actions = [
-          {action: 'checkExistence', params: [undefined, undefined, TAP_POINTER_ACTIONS]},
-        ];
+        framework.actions = [{action: 'checkExistence', params: [undefined, undefined, TAP_POINTER_ACTIONS]}];
         const code = framework.getCodeString();
-        expect(code).toContain(
-          'Could not resolve a widget to verify the existence of at this position',
-        );
+        expect(code).toContain('Could not resolve a widget to verify the existence of at this position');
         expect(code).not.toContain('expect(');
       });
 
@@ -107,12 +96,7 @@ describe('lib/client-frameworks/dart-*.js', function () {
         framework.actions = [
           {
             action: 'enterText',
-            params: [
-              undefined,
-              undefined,
-              ENTER_TEXT_POINTER_ACTIONS,
-              {foundBy: 'byValueKey', value: 'email-field'},
-            ],
+            params: [undefined, undefined, ENTER_TEXT_POINTER_ACTIONS, {foundBy: 'byValueKey', value: 'email-field'}],
           },
         ];
         const code = framework.getCodeString();
@@ -123,9 +107,7 @@ describe('lib/client-frameworks/dart-*.js', function () {
 
       it('should comment out entering text when no Flutter finder was resolved', function () {
         const framework = new FrameworkClass();
-        framework.actions = [
-          {action: 'enterText', params: [undefined, undefined, ENTER_TEXT_POINTER_ACTIONS]},
-        ];
+        framework.actions = [{action: 'enterText', params: [undefined, undefined, ENTER_TEXT_POINTER_ACTIONS]}];
         const code = framework.getCodeString();
         expect(code).toContain('Could not resolve a widget to enter text into at this position');
         expect(code).not.toContain('enterText(');
@@ -170,12 +152,7 @@ describe('lib/client-frameworks/dart-*.js', function () {
         framework.actions = [
           {
             action: 'checkText',
-            params: [
-              undefined,
-              undefined,
-              TAP_POINTER_ACTIONS,
-              {foundBy: 'byText', value: 'YES', shouldExist: true},
-            ],
+            params: [undefined, undefined, TAP_POINTER_ACTIONS, {foundBy: 'byText', value: 'YES', shouldExist: true}],
           },
         ];
         const code = framework.getCodeString();
@@ -184,13 +161,9 @@ describe('lib/client-frameworks/dart-*.js', function () {
 
       it('should comment out a checkText action when no Flutter finder was resolved', function () {
         const framework = new FrameworkClass();
-        framework.actions = [
-          {action: 'checkText', params: [undefined, undefined, TAP_POINTER_ACTIONS]},
-        ];
+        framework.actions = [{action: 'checkText', params: [undefined, undefined, TAP_POINTER_ACTIONS]}];
         const code = framework.getCodeString();
-        expect(code).toContain(
-          'Could not resolve a widget to verify the existence of at this position',
-        );
+        expect(code).toContain('Could not resolve a widget to verify the existence of at this position');
         expect(code).not.toContain('expect(');
       });
     });

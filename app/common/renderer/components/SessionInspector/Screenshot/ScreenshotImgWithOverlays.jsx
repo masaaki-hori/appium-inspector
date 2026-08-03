@@ -4,7 +4,7 @@ import {useTranslation} from 'react-i18next';
 
 import {DRIVERS} from '../../../constants/common.js';
 import {POINTER_TYPES} from '../../../constants/gestures.js';
-import {DEFAULT_SWIPE, DEFAULT_TAP, SCREENSHOT_INTERACTION_MODE} from '../../../constants/screenshot.js';
+import {DEFAULT_SWIPE, SCREENSHOT_INTERACTION_MODE} from '../../../constants/screenshot.js';
 import {INSPECTOR_TABS} from '../../../constants/session-inspector.js';
 import {findAllElementsAtPoint, getElementDisplayName} from '../../../utils/element-hit-testing.js';
 import CoordinatesContainer from './Overlays/CoordinatesContainer.jsx';
@@ -128,8 +128,7 @@ const ScreenshotImgWithOverlays = (props) => {
   // The right-click menu (Flutter driver sessions only) is only meaningful while tracking a
   // tap/swipe coordinate, since its actions rely on rightClickCoordsRef being populated by
   // handleScreenshotContextMenu below
-  const canUseFlutterContextMenu =
-    automationName === DRIVERS.FLUTTER && screenshotInteractionMode === TAP_SWIPE;
+  const canUseFlutterContextMenu = automationName === DRIVERS.FLUTTER && screenshotInteractionMode === TAP_SWIPE;
 
   const handleScreenshotContextMenu = (e) => {
     if (!canUseFlutterContextMenu) {
@@ -413,30 +412,25 @@ const ScreenshotImgWithOverlays = (props) => {
             </ul>
           </div>
         )}
-        {contextMenuOpen &&
-          expandedCandidateIndex !== null &&
-          rightClickCandidates[expandedCandidateIndex] && (
-            <ul
-              ref={submenuRef}
-              className={`${styles.contextMenuList} ${styles.contextSubmenuList}`}
-              style={{left: submenuPos.x, top: submenuPos.y}}
-            >
-              {contextMenuActions.map((action) => (
-                <li
-                  key={action.key}
-                  className={styles.contextMenuItem}
-                  onClick={() =>
-                    runContextMenuAction(
-                      action.key,
-                      rightClickCandidates[expandedCandidateIndex].attributes?.id,
-                    )
-                  }
-                >
-                  {action.label}
-                </li>
-              ))}
-            </ul>
-          )}
+        {contextMenuOpen && expandedCandidateIndex !== null && rightClickCandidates[expandedCandidateIndex] && (
+          <ul
+            ref={submenuRef}
+            className={`${styles.contextMenuList} ${styles.contextSubmenuList}`}
+            style={{left: submenuPos.x, top: submenuPos.y}}
+          >
+            {contextMenuActions.map((action) => (
+              <li
+                key={action.key}
+                className={styles.contextMenuItem}
+                onClick={() =>
+                  runContextMenuAction(action.key, rightClickCandidates[expandedCandidateIndex].attributes?.id)
+                }
+              >
+                {action.label}
+              </li>
+            ))}
+          </ul>
+        )}
         <Modal
           title={t('enterTextModalTitle')}
           open={enterTextModalOpen}

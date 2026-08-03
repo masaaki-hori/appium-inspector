@@ -31,9 +31,7 @@ ${this.indent(code, 4)}
       return `await $(${finderExpr}).tap();`;
     }
     const {x, y} = this.getTapCoordinatesFromPointerActions(pointerActions);
-    return `${this.addComment(
-      `Could not resolve a widget at (${x}, ${y}); falling back to a raw coordinate tap`,
-    )}
+    return `${this.addComment(`Could not resolve a widget at (${x}, ${y}); falling back to a raw coordinate tap`)}
 await $.tester.tapAt(Offset(${x}, ${y}));
 await $.pumpAndSettle();`;
   }

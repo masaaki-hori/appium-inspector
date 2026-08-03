@@ -34,9 +34,7 @@ ${this.indent(code, 4)}
       return `await tester.tap(${finderExpr});\nawait tester.pumpAndSettle();`;
     }
     const {x, y} = this.getTapCoordinatesFromPointerActions(pointerActions);
-    return `${this.addComment(
-      `Could not resolve a widget at (${x}, ${y}); falling back to a raw coordinate tap`,
-    )}
+    return `${this.addComment(`Could not resolve a widget at (${x}, ${y}); falling back to a raw coordinate tap`)}
 await tester.tapAt(const Offset(${x}, ${y}));
 await tester.pumpAndSettle();`;
   }

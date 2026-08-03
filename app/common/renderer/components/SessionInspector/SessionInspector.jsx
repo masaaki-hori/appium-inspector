@@ -3,10 +3,7 @@ import {useTranslation} from 'react-i18next';
 import {useNavigate} from 'react-router';
 
 import {WINDOW_DIMENSIONS} from '../../constants/common.js';
-import {
-  AUTO_REFRESH_INTERVAL,
-  SESSION_EXPIRY_PROMPT_TIMEOUT,
-} from '../../constants/session-inspector.js';
+import {AUTO_REFRESH_INTERVAL, SESSION_EXPIRY_PROMPT_TIMEOUT} from '../../constants/session-inspector.js';
 import HeaderButtons from './Header/HeaderButtons.jsx';
 import Screenshot from './Screenshot/Screenshot.jsx';
 import SessionExpiryModal from './SessionExpiryModal.jsx';
@@ -72,8 +69,7 @@ const Inspector = (props) => {
   // driver's VM service screenshot call flaking). Unmounting on every such hiccup was destroying
   // the right-click context menu/modal state that lives inside <Screenshot>. The error, if any,
   // still renders alongside the (now possibly stale) screenshot - see Screenshot.jsx's JSX.
-  const showScreenshot =
-    (screenshot && !screenshotError) || (isUsingMjpegMode && (!isSourceRefreshOn || !isAwaitingMjpegStream));
+  const showScreenshot = !!screenshot || (isUsingMjpegMode && (!isSourceRefreshOn || !isAwaitingMjpegStream));
 
   const quitSessionAndReturn = useCallback(
     async ({reason, manualQuit = true, detachOnly = false} = {}) => {

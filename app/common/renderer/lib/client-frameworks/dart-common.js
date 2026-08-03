@@ -73,9 +73,7 @@ export default class DartFlutterFramework extends CommonClientFramework {
   codeFor_checkExistence(varNameIgnore, varIndexIgnore, pointerActionsIgnore, flutterFinder) {
     const finderExpr = flutterFinder && this.getFlutterFinderExpression(flutterFinder);
     if (!finderExpr) {
-      return this.addComment(
-        'Could not resolve a widget to verify the existence of at this position',
-      );
+      return this.addComment('Could not resolve a widget to verify the existence of at this position');
     }
     const matcher = flutterFinder.shouldExist ? 'findsOneWidget' : 'findsNothing';
     return `expect(${finderExpr}, ${matcher});`;
@@ -89,12 +87,7 @@ export default class DartFlutterFramework extends CommonClientFramework {
    * point of view, even though they render identically.
    */
   codeFor_checkText(varNameIgnore, varIndexIgnore, pointerActions, flutterFinder) {
-    return this.codeFor_checkExistence(
-      varNameIgnore,
-      varIndexIgnore,
-      pointerActions,
-      flutterFinder,
-    );
+    return this.codeFor_checkExistence(varNameIgnore, varIndexIgnore, pointerActions, flutterFinder);
   }
 
   /**
