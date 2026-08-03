@@ -84,8 +84,7 @@ function collectElementsAtPoint(sourceJSON, x, y) {
   }
 
   const {x1, y1, x2, y2} = parseCoordinates(sourceJSON);
-  const isWithinBounds =
-    x1 !== undefined && x2 > x1 && y2 > y1 && x >= x1 && x <= x2 && y >= y1 && y <= y2;
+  const isWithinBounds = x1 !== undefined && x2 > x1 && y2 > y1 && x >= x1 && x <= x2 && y >= y1 && y <= y2;
 
   if (isWithinBounds) {
     matches.push(sourceJSON);
