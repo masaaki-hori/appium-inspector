@@ -10,18 +10,17 @@ import {
 import HeaderButtons from './Header/HeaderButtons.jsx';
 import Screenshot from './Screenshot/Screenshot.jsx';
 import SessionExpiryModal from './SessionExpiryModal.jsx';
-import styles from './SessionInspector.module.css';
 import SessionInspectorTabs from './SessionInspectorTabs.jsx';
+
+import styles from './SessionInspector.module.css';
 
 // resize width to something sensible for using the inspector on first run
 const resizeWindowOnLaunch = () => {
   const curHeight = window.innerHeight;
   const curWidth = window.innerWidth;
   if (curHeight < WINDOW_DIMENSIONS.MIN_HEIGHT || curWidth < WINDOW_DIMENSIONS.MIN_WIDTH) {
-    const newWidth =
-      curWidth < WINDOW_DIMENSIONS.MIN_WIDTH ? WINDOW_DIMENSIONS.MIN_WIDTH : curWidth;
-    const newHeight =
-      curHeight < WINDOW_DIMENSIONS.MIN_HEIGHT ? WINDOW_DIMENSIONS.MIN_HEIGHT : curHeight;
+    const newWidth = curWidth < WINDOW_DIMENSIONS.MIN_WIDTH ? WINDOW_DIMENSIONS.MIN_WIDTH : curWidth;
+    const newHeight = curHeight < WINDOW_DIMENSIONS.MIN_HEIGHT ? WINDOW_DIMENSIONS.MIN_HEIGHT : curHeight;
     window.resizeTo(newWidth, newHeight);
   }
 };
@@ -74,7 +73,7 @@ const Inspector = (props) => {
   // the right-click context menu/modal state that lives inside <Screenshot>. The error, if any,
   // still renders alongside the (now possibly stale) screenshot - see Screenshot.jsx's JSX.
   const showScreenshot =
-    !!screenshot || (isUsingMjpegMode && (!isSourceRefreshOn || !isAwaitingMjpegStream));
+    (screenshot && !screenshotError) || (isUsingMjpegMode && (!isSourceRefreshOn || !isAwaitingMjpegStream));
 
   const quitSessionAndReturn = useCallback(
     async ({reason, manualQuit = true, detachOnly = false} = {}) => {
@@ -91,13 +90,7 @@ const Inspector = (props) => {
     getSavedClientFramework();
     runKeepAliveLoop();
     setSessionTime(Date.now());
-  }, [
-    applyClientMethod,
-    getSavedClientFramework,
-    runKeepAliveLoop,
-    setSessionTime,
-    storeSessionSettings,
-  ]);
+  }, [applyClientMethod, getSavedClientFramework, runKeepAliveLoop, setSessionTime, storeSessionSettings]);
 
   // Periodically re-fetch the screenshot/source on their own, so the Inspector eventually shows
   // app state changes that weren't driven by an Inspector-initiated action (e.g. a timer in the
