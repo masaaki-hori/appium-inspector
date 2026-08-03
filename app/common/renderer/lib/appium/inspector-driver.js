@@ -96,10 +96,7 @@ export default class InspectorDriver {
           appMode,
         });
       } else {
-        log.info(
-          `Handling client method request with method '${methodName}' ` +
-            `and args ${JSON.stringify(args)}`,
-        );
+        log.info(`Handling client method request with method '${methodName}' and args ${JSON.stringify(args)}`);
         res = await this.executeMethod({
           methodName,
           args,
@@ -303,10 +300,7 @@ export default class InspectorDriver {
     } = this.driver;
     try {
       const driverWindowSize = await this.driver.getWindowRect();
-      if (
-        (platformName ?? '').toLowerCase() !== 'android' ||
-        (automationName ?? '').toLowerCase() !== 'uiautomator2'
-      ) {
+      if ((platformName ?? '').toLowerCase() !== 'android' || (automationName ?? '').toLowerCase() !== 'uiautomator2') {
         return {windowSize: driverWindowSize};
       }
       // UiAutomator2 requires adjustments depending on the result of `mobile: deviceInfo`.
@@ -416,10 +410,7 @@ export default class InspectorDriver {
           // in landscape mode, there is empty space on both sides (at default zoom level), so add offset for that too
           if (windowSize.height < windowSize.width) {
             try {
-              const deviceScreenInfo = await this.driver.executeScript(
-                'mobile:deviceScreenInfo',
-                [],
-              );
+              const deviceScreenInfo = await this.driver.executeScript('mobile:deviceScreenInfo', []);
               webviewLeftOffset = deviceScreenInfo.statusBarSize.height;
             } catch {
               try {
@@ -454,10 +445,9 @@ export default class InspectorDriver {
       await this.driver.switchAppiumContext(currentContext);
 
       // Adjust all elements by the calculated offsets
-      await this.driver.executeScript(
-        `return (${setHtmlElementAttributes}).apply(null, arguments)`,
-        [{isAndroid, webviewTopOffset, webviewLeftOffset}],
-      );
+      await this.driver.executeScript(`return (${setHtmlElementAttributes}).apply(null, arguments)`, [
+        {isAndroid, webviewTopOffset, webviewLeftOffset},
+      ]);
     }
 
     return {contexts, contextsError, currentContext, currentContextError};
@@ -563,9 +553,7 @@ export default class InspectorDriver {
               id: webviewName,
               ...(page && Object.hasOwn(page, 'title') ? {title: page.title} : {}),
               ...(page && Object.hasOwn(page, 'url') ? {url: page.url} : {}),
-              ...(page && Object.hasOwn(info, 'Android-Package')
-                ? {packageName: info['Android-Package']}
-                : {}),
+              ...(page && Object.hasOwn(info, 'Android-Package') ? {packageName: info['Android-Package']} : {}),
               ...(page && Object.hasOwn(page, 'id') ? {handle: page.id} : {}),
             });
           });
