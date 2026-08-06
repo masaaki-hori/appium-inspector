@@ -139,6 +139,12 @@
   background: rgba(0, 0, 0, 0.06);
 }
 
+.contextMenuSeparator {
+  height: 1px;
+  margin: 4px 0;
+  background: rgba(0, 0, 0, 0.06);
+}
+
 .contextSubmenuList {
   /* Positioned via inline style (submenuPos, computed in JS from the hovered candidate row's own
      bounding rect) - fixed, not absolute, since this renders as a sibling of .contextMenu rather

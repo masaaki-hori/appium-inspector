@@ -57,7 +57,8 @@ await tester.pumpAndSettle();`;
     const submitStep = flutterFinder.submitted
       ? '\nawait tester.testTextInput.receiveAction(TextInputAction.done);\nawait tester.pumpAndSettle();'
       : '';
-    return `await tester.enterText(${finderExpr}, ${JSON.stringify(text)});
+    const promptedComment = flutterFinder.prompted ? `${this.promptedComment(text)}\n` : '';
+    return `${promptedComment}await tester.enterText(${finderExpr}, ${JSON.stringify(text)});
 await tester.pumpAndSettle();${submitStep}`;
   }
 }

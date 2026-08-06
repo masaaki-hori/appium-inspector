@@ -113,6 +113,25 @@ describe('lib/client-frameworks/dart-*.js', function () {
         expect(code).not.toContain('enterText(');
       });
 
+      it('should add a QA MANUAL comment for a prompted enterText, but still enter the recorded text', function () {
+        const framework = new FrameworkClass();
+        framework.actions = [
+          {
+            action: 'enterText',
+            params: [
+              undefined,
+              undefined,
+              ENTER_TEXT_POINTER_ACTIONS,
+              {foundBy: 'byValueKey', value: 'card-number-field', prompted: true},
+            ],
+          },
+        ];
+        const code = framework.getCodeString();
+        expect(code).toContain('QA MANUAL');
+        expect(code).toContain('enterText');
+        expect(code).toContain('"hello@example.com"');
+      });
+
       it('should also submit a TextInputAction.done after entering text when the live interaction did', function () {
         const framework = new FrameworkClass();
         framework.actions = [
@@ -165,6 +184,14 @@ describe('lib/client-frameworks/dart-*.js', function () {
         const code = framework.getCodeString();
         expect(code).toContain('Could not resolve a widget to verify the existence of at this position');
         expect(code).not.toContain('expect(');
+      });
+
+      it('should print a QA MANUAL instruction for a shell command, since it cannot run one in-process', function () {
+        const framework = new FrameworkClass();
+        framework.actions = [{action: 'shellCommand', params: ['ldb-cli qtest user kyc approval']}];
+        const code = framework.getCodeString();
+        expect(code).toContain('QA MANUAL');
+        expect(code).toContain('ldb-cli qtest user kyc approval');
       });
     });
   }

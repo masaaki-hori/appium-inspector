@@ -2,10 +2,19 @@ import {DEFAULT_SWIPE, DEFAULT_TAP} from '../../constants/screenshot.js';
 import {isEmpty} from '../../utils/common.js';
 
 export default class CommonClientFramework {
-  constructor(serverUrl, serverUrlParts, caps) {
+  /**
+   * @param {{width: number, height: number}} [windowSize] the recording device's screen size (the
+   *   live 'state.inspector.windowSize' at the moment this code was generated - see
+   *   'Recorder.jsx'), used to scale recorded pixel coordinates to whatever device the
+   *   *generated* script actually runs against (see 'js-wdio.js#codeForScaledCoordinates') -
+   *   without this, a coordinate-based tap/swipe only replays correctly on a device with the
+   *   exact same resolution as the one it was recorded on.
+   */
+  constructor(serverUrl, serverUrlParts, caps, windowSize) {
     this.serverUrl = serverUrl;
     this.serverUrlParts = serverUrlParts;
     this.caps = caps || {};
+    this.windowSize = windowSize;
     this.actions = [];
     this.localVarCount = 0;
     this.localVarCache = {};
@@ -27,6 +36,13 @@ export default class CommonClientFramework {
       x2: pointerMoveActionEnd.x,
       y2: pointerMoveActionEnd.y,
     };
+  }
+
+  // Extracts the text of a recorded 'enterText' pointer-actions payload (see
+  // 'actions/SessionInspector.js#enterTextAtCoordinates').
+  getEnterTextFromPointerActions(pointerActions) {
+    const enterTextTick = pointerActions[DEFAULT_TAP.POINTER_NAME].find((tick) => tick.type === 'enterText');
+    return enterTextTick?.text ?? '';
   }
 
   indent(str, spaces) {

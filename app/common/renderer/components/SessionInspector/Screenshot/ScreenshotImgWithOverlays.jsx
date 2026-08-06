@@ -1,4 +1,4 @@
-import {Input, Modal, Spin} from 'antd';
+import {Checkbox, Input, Modal, Spin} from 'antd';
 import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 
@@ -64,9 +64,11 @@ const ScreenshotImgWithOverlays = (props) => {
     automationName,
     tapAtCoordinates,
     tapElementAtCoordinates,
+    tapDirectElementAtCoordinates,
     verifyElementExistsAtCoordinates,
     enterTextAtCoordinates,
     checkTextAtCoordinates,
+    recordShellCommand,
     onContextMenuActiveChange,
   } = props;
 
@@ -98,17 +100,28 @@ const ScreenshotImgWithOverlays = (props) => {
   const contextMenuRef = useRef(null);
   const [enterTextModalOpen, setEnterTextModalOpen] = useState(false);
   const [enterTextValue, setEnterTextValue] = useState('');
+  // Whether the *generated* code should prompt for this value at runtime (via stdin) instead of
+  // replaying the exact string typed here - for values that must differ on every run (e.g. a
+  // patient card number the app-under-test rejects as a duplicate). Doesn't affect the live
+  // interaction itself, which still needs a real value typed into enterTextValue to drive the
+  // app right now - only tags the recording for 'js-wdio.js#codeFor_enterText'.
+  const [enterTextPrompted, setEnterTextPrompted] = useState(false);
   const enterTextInputRef = useRef(null);
   const [checkTextModalOpen, setCheckTextModalOpen] = useState(false);
   const [checkTextValue, setCheckTextValue] = useState('');
   const checkTextInputRef = useRef(null);
+  // Unlike the other modals above, this one isn't tied to any particular candidate element (a
+  // shell command has no target widget), so it doesn't touch selectedElementIdRef at all.
+  const [shellCommandModalOpen, setShellCommandModalOpen] = useState(false);
+  const [shellCommandValue, setShellCommandValue] = useState('');
+  const shellCommandInputRef = useRef(null);
   // Tell <SessionInspector> whenever the right-click menu (or a modal opened from it) is up, so
   // it can skip the periodic auto-refresh tick entirely while the user is interacting with it -
   // belt-and-braces alongside owning the menu outright above, so a refresh can never land (and
   // reflow the page) mid-interaction in the first place.
   useEffect(() => {
-    onContextMenuActiveChange?.(contextMenuOpen || enterTextModalOpen || checkTextModalOpen);
-  }, [contextMenuOpen, enterTextModalOpen, checkTextModalOpen, onContextMenuActiveChange]);
+    onContextMenuActiveChange?.(contextMenuOpen || enterTextModalOpen || checkTextModalOpen || shellCommandModalOpen);
+  }, [contextMenuOpen, enterTextModalOpen, checkTextModalOpen, shellCommandModalOpen, onContextMenuActiveChange]);
   // handleScreenshotContextMenu captures the right-click position straight from the event itself
   // into this ref (rather than relying on the live x/y hover state, which the browser resets the
   // instant the context menu overlay appears), which every context menu action reads instead.
@@ -222,6 +235,7 @@ const ScreenshotImgWithOverlays = (props) => {
   // (>1 candidates) menu shapes below.
   const contextMenuActions = [
     {key: 'tap', label: t('tapMenuItem')},
+    {key: 'tapDirect', label: t('tapDirectMenuItem')},
     {key: 'verifyElementExists', label: t('verifyElementExists')},
     {key: 'verifyElementDoesNotExist', label: t('verifyElementDoesNotExist')},
     {key: 'enterText', label: t('enterTextMenuItem')},
@@ -235,6 +249,9 @@ const ScreenshotImgWithOverlays = (props) => {
       switch (actionKey) {
         case 'tap':
           tapElementAtCoordinates(cx, cy, elementId);
+          break;
+        case 'tapDirect':
+          tapDirectElementAtCoordinates(cx, cy, elementId);
           break;
         case 'verifyElementExists':
           verifyElementExistsAtCoordinates(cx, cy, true, elementId);
@@ -250,18 +267,22 @@ const ScreenshotImgWithOverlays = (props) => {
           selectedElementIdRef.current = elementId;
           setCheckTextModalOpen(true);
           break;
+        case 'runShellCommand':
+          setShellCommandModalOpen(true);
+          break;
         default:
           break;
       }
     },
-    [tapElementAtCoordinates, verifyElementExistsAtCoordinates],
+    [tapElementAtCoordinates, tapDirectElementAtCoordinates, verifyElementExistsAtCoordinates],
   );
 
   const handleEnterTextOk = async () => {
     setEnterTextModalOpen(false);
     const {x: tx, y: ty} = rightClickCoordsRef.current ?? {};
-    await enterTextAtCoordinates(tx, ty, enterTextValue, selectedElementIdRef.current);
+    await enterTextAtCoordinates(tx, ty, enterTextValue, selectedElementIdRef.current, enterTextPrompted);
     setEnterTextValue('');
+    setEnterTextPrompted(false);
   };
 
   const handleCheckTextOk = async () => {
@@ -269,6 +290,12 @@ const ScreenshotImgWithOverlays = (props) => {
     const {x: tx, y: ty} = rightClickCoordsRef.current ?? {};
     await checkTextAtCoordinates(tx, ty, checkTextValue, selectedElementIdRef.current);
     setCheckTextValue('');
+  };
+
+  const handleShellCommandOk = () => {
+    setShellCommandModalOpen(false);
+    recordShellCommand(shellCommandValue);
+    setShellCommandValue('');
   };
 
   // Used when creating a gesture and clicking on screenshot to set move coordinates
@@ -375,6 +402,17 @@ const ScreenshotImgWithOverlays = (props) => {
             style={{left: contextMenuPos.x, top: contextMenuPos.y}}
           >
             <ul className={styles.contextMenuList}>
+              {/* Not tied to any particular widget (unlike everything below), so it lives at the
+                  top of the menu unconditionally, rather than being one more entry in
+                  contextMenuActions repeated inside every candidate's submenu. */}
+              <li
+                key="runShellCommand"
+                className={styles.contextMenuItem}
+                onClick={() => runContextMenuAction('runShellCommand')}
+              >
+                {t('runShellCommandMenuItem')}
+              </li>
+              <li className={styles.contextMenuSeparator} />
               {rightClickCandidates.length <= 1
                 ? contextMenuActions.map((action) => (
                     <li
@@ -452,6 +490,13 @@ const ScreenshotImgWithOverlays = (props) => {
             onChange={(e) => setEnterTextValue(e.target.value)}
             onPressEnter={handleEnterTextOk}
           />
+          <Checkbox
+            checked={enterTextPrompted}
+            onChange={(e) => setEnterTextPrompted(e.target.checked)}
+            style={{marginTop: 8}}
+          >
+            {t('enterTextPromptAtRuntime')}
+          </Checkbox>
         </Modal>
         <Modal
           title={t('checkTextModalTitle')}
@@ -470,6 +515,25 @@ const ScreenshotImgWithOverlays = (props) => {
             value={checkTextValue}
             onChange={(e) => setCheckTextValue(e.target.value)}
             onPressEnter={handleCheckTextOk}
+          />
+        </Modal>
+        <Modal
+          title={t('runShellCommandModalTitle')}
+          open={shellCommandModalOpen}
+          onOk={handleShellCommandOk}
+          onCancel={() => setShellCommandModalOpen(false)}
+          afterOpenChange={(isOpen) => {
+            if (isOpen) {
+              shellCommandInputRef.current?.focus();
+            }
+          }}
+        >
+          <Input
+            ref={shellCommandInputRef}
+            placeholder={t('runShellCommandInputPlaceholder')}
+            value={shellCommandValue}
+            onChange={(e) => setShellCommandValue(e.target.value)}
+            onPressEnter={handleShellCommandOk}
           />
         </Modal>
       </div>
