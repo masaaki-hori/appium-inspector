@@ -1246,6 +1246,56 @@ export function tapElementAtCoordinates(x, y, elementId) {
 }
 
 /**
+ * Taps the widget at the given point of a Flutter driver session by invoking its own 'onTap'
+ * callback directly (see 'appium_handler.dart's 'tapDirect'/'_driveByDirectCallback'), instead of
+ * synthesizing a pointer gesture at a screen coordinate the way 'tapElementAtCoordinates' (and
+ * every other tap path) does. That coordinate-based dispatch is hit-tested against whatever is
+ * currently painted on top at that point - a coach-mark highlight, a dialog barrier - which can
+ * silently intercept the gesture even when the resolved locator correctly identifies the intended
+ * widget underneath. This bypasses paint order entirely, at the cost of only working when a
+ * locator actually resolves (there's no raw-coordinate fallback, since a bare coordinate is
+ * exactly what risks landing on the overlay instead of the intended widget).
+ *
+ * Same local pre-check, 'elementId' disambiguation escape hatch and recording behavior as
+ * 'tapElementAtCoordinates'.
+ *
+ * @param {string} [elementId] see 'verifyElementExistsAtCoordinates'
+ */
+export function tapDirectElementAtCoordinates(x, y, elementId) {
+  return async (dispatch, getState) => {
+    const {sourceJSON, isRecording} = getState().inspector;
+    if (!elementId && !findElementAtPoint(sourceJSON, x, y)) {
+      notification.error({title: i18n.t('noElementFoundAtPosition')});
+      return;
+    }
+
+    const {POINTER_NAME, DURATION_1} = DEFAULT_TAP;
+    const tapAction = applyClientMethod({
+      methodName: SCREENSHOT_INTERACTION_MODE.TAP_DIRECT,
+      args: [
+        {
+          [POINTER_NAME]: [
+            {type: POINTER_TYPES.POINTER_MOVE, duration: DURATION_1, x, y},
+            {type: SCREENSHOT_INTERACTION_MODE.TAP_DIRECT, elementId},
+          ],
+        },
+      ],
+    });
+    const commandRes = await tapAction(dispatch, getState);
+    const flutterFinder = parseFlutterFinderFromResponse(commandRes);
+
+    if (!flutterFinder) {
+      notification.error({title: i18n.t('couldNotResolveElementLocator')});
+      return;
+    }
+
+    if (isRecording) {
+      dispatch({type: RECORD_FLUTTER_FINDER, flutterFinder});
+    }
+  };
+}
+
+/**
  * Checks (read-only, no interaction with the app) whether a widget exists at the given point of
  * a Flutter driver session, using 'appium_handler.dart's 'checkExistence' performActions
  * handling - same finder-resolution mechanism as a tap, but without actually tapping.
@@ -1316,7 +1366,14 @@ export function verifyElementExistsAtCoordinates(x, y, shouldExist, elementId) {
  *
  * @param {string} [elementId] see 'verifyElementExistsAtCoordinates'
  */
-export function enterTextAtCoordinates(x, y, text, elementId) {
+/**
+ * @param {boolean} [prompted] whether the *generated* code should prompt for this value at
+ *   runtime (via stdin) instead of replaying the exact text typed here - for values that must
+ *   differ on every run (e.g. a patient card number the app-under-test rejects as a duplicate).
+ *   Only tags the recording; the live interaction always uses the literal 'text' given here.
+ *   See 'js-wdio.js#codeFor_enterText'.
+ */
+export function enterTextAtCoordinates(x, y, text, elementId, prompted) {
   return async (dispatch, getState) => {
     const {sourceJSON, isRecording} = getState().inspector;
     if (!elementId && !findElementAtPoint(sourceJSON, x, y)) {
@@ -1345,7 +1402,7 @@ export function enterTextAtCoordinates(x, y, text, elementId) {
     }
 
     if (isRecording) {
-      dispatch({type: RECORD_FLUTTER_FINDER, flutterFinder});
+      dispatch({type: RECORD_FLUTTER_FINDER, flutterFinder: {...flutterFinder, prompted}});
     }
   };
 }
@@ -1408,6 +1465,23 @@ export function checkTextAtCoordinates(x, y, expectedText, elementId) {
         type: RECORD_FLUTTER_FINDER,
         flutterFinder: {foundBy: 'byText', value: expectedText, shouldExist: true},
       });
+    }
+  };
+}
+
+/**
+ * Records a "run this shell command" step from the context menu's 'runShellCommand' action -
+ * unlike every other recorded action here, this has no Appium/device counterpart at all (there's
+ * nothing to tap/check on the app-under-test), so it's purely a marker for code generation,
+ * letting a generated script shell out (e.g. to a backend admin CLI) at exactly the point it was
+ * recorded. See 'js-wdio.js#codeFor_shellCommand' (runs it for real, since a generated JS test is
+ * a normal host-side Node.js process) and 'dart-common.js#codeFor_shellCommand' (which can only
+ * print a manual instruction, since integration_test/patrol run in-process on the device).
+ */
+export function recordShellCommand(command) {
+  return (dispatch, getState) => {
+    if (getState().inspector.isRecording) {
+      dispatch({type: RECORD_ACTION, action: 'shellCommand', params: [command]});
     }
   };
 }
@@ -1480,7 +1554,13 @@ function tapFlutterWidgetAtCoordinates(x, y) {
 function parseFlutterFinderFromResponse(commandRes) {
   try {
     const {foundBy, value, text, submitted} = JSON.parse(commandRes.response.message);
-    return foundBy && value ? {foundBy, value, text, submitted} : null;
+    // Defends against the same class of bug '_actionResult'/'appium_handler.dart' had (and the
+    // page source's 'key' attribute had before it): a missing Dart field naively interpolated
+    // into a JSON string encodes as the literal 4-character string "null", not JSON null - which
+    // is truthy here, so a widget that deliberately couldn't be resolved would otherwise still
+    // look "found". The Dart side is now fixed to use jsonEncode instead, but this stays as a
+    // second line of defense against the same mistake recurring anywhere else.
+    return foundBy && foundBy !== 'null' && value && value !== 'null' ? {foundBy, value, text, submitted} : null;
   } catch {
     return null;
   }

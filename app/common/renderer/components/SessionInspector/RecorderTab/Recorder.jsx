@@ -16,6 +16,7 @@ const Recorder = (props) => {
     clientFramework,
     serverDetails,
     sessionCaps,
+    windowSize,
     setClientFramework,
     toggleShowBoilerplate,
     clearRecording,
@@ -25,7 +26,7 @@ const Recorder = (props) => {
   const {serverUrl, serverUrlParts} = serverDetails;
   const ClientFrameworkClass = CLIENT_FRAMEWORK_MAP[clientFramework];
 
-  const framework = new ClientFrameworkClass(serverUrl, serverUrlParts, sessionCaps);
+  const framework = new ClientFrameworkClass(serverUrl, serverUrlParts, sessionCaps, windowSize);
   framework.actions = recordedActions;
   const clientCode = framework.getCodeString(showBoilerplate);
 

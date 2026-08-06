@@ -2,8 +2,8 @@
 // TAP_SWIPE refers to both TAP and SWIPE
 // TAP_ELEMENT refers to tapping an element highlighter to both select and tap it in one action
 // GESTURE refers to playback via gesture editor
-// CHECK_EXISTENCE, ENTER_TEXT and CHECK_TEXT are Flutter-only actions (right-click, in
-// TAP_SWIPE mode) - see 'appium_handler.dart's 'checkExistence'/'enterText'/'checkText'
+// CHECK_EXISTENCE, ENTER_TEXT, CHECK_TEXT and TAP_DIRECT are Flutter-only actions (right-click, in
+// TAP_SWIPE mode) - see 'appium_handler.dart's 'checkExistence'/'enterText'/'checkText'/'tapDirect'
 // performActions handling. Their values also double as the performActions action 'type' sent to
 // that Dart-side handler
 export const SCREENSHOT_INTERACTION_MODE = {
@@ -16,6 +16,7 @@ export const SCREENSHOT_INTERACTION_MODE = {
   CHECK_EXISTENCE: 'checkExistence',
   ENTER_TEXT: 'enterText',
   CHECK_TEXT: 'checkText',
+  TAP_DIRECT: 'tapDirect',
 };
 
 // Default parameters when executing coordinate-based swipe over app screenshot

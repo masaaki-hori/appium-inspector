@@ -1,6 +1,5 @@
 import refractorDart from 'refractor/dart';
 
-import {DEFAULT_TAP} from '../../constants/screenshot.js';
 import CommonClientFramework from './common.js';
 
 /**
@@ -91,12 +90,29 @@ export default class DartFlutterFramework extends CommonClientFramework {
   }
 
   /**
-   * Extracts the text of a recorded 'enterText' pointer-actions payload (see
-   * 'actions/SessionInspector.js#enterTextAtCoordinates').
+   * integration_test/patrol run in-process on the device itself (see the 'js-wdio.js' override
+   * of this same action for why that rules out actually running a shell command from here), so
+   * the next best thing - and consistent with this project's own QA test specs, which already
+   * 'print()' a "### QA MANUAL" instruction for backend/admin steps that can't be automated - is
+   * to print instructions for whoever is watching the terminal to run it themselves.
+   *
+   * Unlike every other 'codeFor_*' here, this isn't tied to any element, so 'recordShellCommand'
+   * (in actions/SessionInspector.js) doesn't prepend the usual variableName/variableIndex pair to
+   * its recorded params - 'command' is the only (first) argument.
    */
-  getEnterTextFromPointerActions(pointerActions) {
-    const {POINTER_NAME} = DEFAULT_TAP;
-    const enterTextTick = pointerActions[POINTER_NAME].find((tick) => tick.type === 'enterText');
-    return enterTextTick?.text ?? '';
+  codeFor_shellCommand(command) {
+    return `print(${JSON.stringify(`### QA MANUAL: run the following in a terminal: ${command}`)});`;
+  }
+
+  /**
+   * A comment for a recorded 'enterText' action marked (via the Enter Text modal's checkbox) as
+   * needing a fresh value on every run - e.g. a patient card number the app-under-test rejects as
+   * a duplicate. Unlike 'js-wdio.js' (a normal host-side Node process, which can prompt on
+   * stdin - see its 'codeFor_enterText'), integration_test/patrol run in-process on the device, so
+   * there's no interactive terminal to prompt through; this just flags the recorded value for
+   * manual replacement instead.
+   */
+  promptedComment(recordedText) {
+    return this.addComment(`QA MANUAL: replace ${JSON.stringify(recordedText)} below with a fresh value for this run`);
   }
 }
