@@ -19,7 +19,7 @@ describe('lib/client-frameworks/dart-*.js', function () {
     ['DartIntegrationTestFramework', DartIntegrationTestFramework],
     ['DartPatrolFramework', DartPatrolFramework],
   ]) {
-    describe(name, function () {
+    describe(`${name}`, function () {
       it('should render a widget-based tap when a Flutter finder was resolved', function () {
         const framework = new FrameworkClass();
         framework.actions = [
