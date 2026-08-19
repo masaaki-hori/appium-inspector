@@ -18,11 +18,315 @@ export default class JsWdIoFramework extends CommonClientFramework {
 import {remote} from 'webdriverio';
 import {execSync} from 'node:child_process';
 import {createInterface} from 'node:readline/promises';
+import {appendFileSync, writeFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import {dirname, join} from 'node:path';
+
+// Writes progress messages and input prompts to a separate log file too, alongside the console -
+// tail it in another terminal (\`tail -f test-script-progress.log\`) to follow along without
+// Appium/WebdriverIO's own much noisier logging burying them.
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const PROGRESS_LOG_PATH = join(SCRIPT_DIR, 'test-script-progress.log');
+function log(message) {
+  console.log(message);
+  const timestamp = new Date().toISOString();
+  appendFileSync(PROGRESS_LOG_PATH, \`[\${timestamp}] \${message}\\n\`);
+}
+
+// Saves the current page source to a file whenever retryFlutterAction times out, so the actual
+// field values/screen state at the moment of failure can be inspected afterwards without needing
+// to reproduce the failure on the device again.
+async function dumpPageSourceOnFailure(driver, label) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const path = join(SCRIPT_DIR, \`test-script-failure-\${timestamp}.xml\`);
+  try {
+    const src = await driver.getPageSource();
+    writeFileSync(path, src);
+    log(\`Saved page source on failure: \${path} (\${label})\`);
+  } catch (e) {
+    log(\`Failed to save page source on failure too: \${e.message}\`);
+  }
+}
+
+// Waits for the page source to stop changing between consecutive reads, instead of a fixed sleep -
+// there's no driver command to wait for Flutter's frame scheduler to go idle, so two identical
+// reads in a row are used as a stand-in signal that rendering has settled. Deliberately doesn't
+// sleep between polls (some apps treat a period with zero driver activity as "idle" and can react
+// to it, e.g. surfacing an unrelated interstitial) - it just calls getPageSource() back to back,
+// so the only gap between polls is that call's own round-trip time.
+async function waitForPageSourceStable(driver, {timeoutMs = 3000} = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let previous = await driver.getPageSource();
+  while (Date.now() < deadline) {
+    const current = await driver.getPageSource();
+    if (current === previous) {
+      return;
+    }
+    previous = current;
+  }
+}
+
+// 'targetCx'/'targetCy' are absolute coordinates in the same space as getPageSource()'s bounds
+// (i.e. whatever the *current* device is actually reporting them in) - not a fraction pre-computed
+// against some other device's screen size at recording time. Callers should derive them fresh from
+// this run's own page source (e.g. a matched element's center), so this keeps working across
+// devices/platforms with different screen sizes instead of only the one it was recorded on.
+//
+// Performs 'action', then taps that coordinate if a first-run coach-mark/onboarding overlay is
+// covering the screen afterwards. Use this in place of a plain tap wherever a one-time onboarding
+// tooltip might appear on top of the real target and needs dismissing before continuing.
+async function tapDirectThenDismissCoachMark(driver, action, targetCx, targetCy) {
+  await driver.getPageSource();
+  await driver.performActions([
+    { type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' }, actions: [action] },
+  ]);
+  await new Promise((r) => setTimeout(r, 300));
+  await driver.getPageSource();
+  const check = await driver.performActions([
+    { type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' }, actions: [{ type: 'checkExistence', foundBy: 'byText', value: 'ここをタップ' }] },
+  ]);
+  let { foundBy } = JSON.parse(check.response.message);
+  if (foundBy === 'null') foundBy = null;
+  if (foundBy) {
+    await driver.action('pointer')
+      .move({ duration: 0, x: Math.round(targetCx), y: Math.round(targetCy) })
+      .down({ button: 0 })
+      .pause(50)
+      .up({ button: 0 })
+      .perform();
+    await new Promise((r) => setTimeout(r, 300));
+  }
+}
+
+// Finds and taps a wide (>300px), bottom-of-screen InkWell by shape/position rather than text -
+// useful for a consent screen's "agree"/"accept" button when its exact label text varies between
+// builds/locales. Returns false (without throwing) if no such button is on screen, so callers can
+// fall back to a different dismissal (e.g. the back button) instead.
+async function tapAgreeButton(driver) {
+  const src = await driver.getPageSource();
+  const inkwells = [...src.matchAll(/<InkWell id="[^"]*"[^>]*bounds="\\[(-?\\d+),(-?\\d+)\\]\\[(-?\\d+),(-?\\d+)\\]"/g)];
+  const index = inkwells.findIndex(([, x1, y1, x2, y2]) => {
+    const width = Number(x2) - Number(x1);
+    const cy = (Number(y1) + Number(y2)) / 2;
+    const onScreen = Number(x1) >= -10 && Number(x2) <= 421;
+    return onScreen && width > 300 && Math.abs(cy - 861) < 30;
+  });
+  if (index === -1) {
+    return false;
+  }
+  await retryFlutterAction(
+    driver,
+    {"type":"tapDirect","foundBy":"byType","value":\`InkWell#\${index}\`},
+    (foundBy) => Boolean(foundBy),
+    \`Could not resolve the widget to tapDirect (foundBy=byType, value=InkWell#\${index})\`,
+  );
+  return true;
+}
+
+// Finds the top-left back arrow icon by its known compact shape/position rather than a fixed
+// byType index - the total Icon count (and so any fixed index) varies by screen, since background
+// IndexedStack-nested screens contribute their own Icons ahead of it. The "near (26, 85)" position
+// this matches on is itself device-relative (a corner of a ~411x923 screen) - it's only used to
+// pick out the right Icon among several, not as the actual tap target; callers that need real
+// on-screen coordinates should use findBackIconCenter below, which returns this icon's own
+// measured bounds rather than the fixed position it was found near.
+function findBackIconIndex(src) {
+  const icons = [...src.matchAll(/<Icon id="[^"]*"[^>]*bounds="\\[(-?\\d+),(-?\\d+)\\]\\[(-?\\d+),(-?\\d+)\\]"/g)];
+  return icons.findIndex(([, x1, y1, x2, y2]) => {
+    const cx = (Number(x1) + Number(x2)) / 2;
+    const cy = (Number(y1) + Number(y2)) / 2;
+    return Math.abs(cx - 26) < 5 && Math.abs(cy - 85) < 5;
+  });
+}
+
+// Same match as findBackIconIndex, but returns the icon's own measured center instead of its
+// array index - the real on-screen coordinate to tap, derived from this run's own page source
+// rather than a value baked in at recording time.
+function findBackIconCenter(src) {
+  const icons = [...src.matchAll(/<Icon id="[^"]*"[^>]*bounds="\\[(-?\\d+),(-?\\d+)\\]\\[(-?\\d+),(-?\\d+)\\]"/g)];
+  const match = icons.find(([, x1, y1, x2, y2]) => {
+    const cx = (Number(x1) + Number(x2)) / 2;
+    const cy = (Number(y1) + Number(y2)) / 2;
+    return Math.abs(cx - 26) < 5 && Math.abs(cy - 85) < 5;
+  });
+  if (!match) {
+    return null;
+  }
+  const [, x1, y1, x2, y2] = match;
+  return { cx: (Number(x1) + Number(x2)) / 2, cy: (Number(y1) + Number(y2)) / 2 };
+}
+
+async function tapBackIcon(driver) {
+  const src = await driver.getPageSource();
+  const index = findBackIconIndex(src);
+  if (index === -1) {
+    throw new Error('Could not find the back icon in the current page source');
+  }
+  await retryFlutterAction(
+    driver,
+    {"type":"tap","foundBy":"byType","value":\`Icon#\${index}\`},
+    (foundBy) => Boolean(foundBy),
+    \`Could not resolve the widget to tap (foundBy=byType, value=Icon#\${index})\`,
+  );
+}
+
+async function tapBackIconThenDismissCoachMark(driver) {
+  const src = await driver.getPageSource();
+  const index = findBackIconIndex(src);
+  if (index === -1) {
+    throw new Error('Could not find the back icon in the current page source');
+  }
+  const center = findBackIconCenter(src);
+  await tapDirectThenDismissCoachMark(
+    driver,
+    { type: 'tapDirect', foundBy: 'byType', value: \`Icon#\${index}\` },
+    center.cx,
+    center.cy,
+  );
+}
+
+// Dismisses a terms/privacy-policy viewer screen by tapping its agree button if present, falling
+// back to the back icon otherwise (some viewers are read-only and only offer a back button).
+async function closeTermsViewer(driver) {
+  await driver.getPageSource();
+  const agreed = await tapAgreeButton(driver);
+  if (!agreed) {
+    await tapBackIcon(driver);
+  }
+}
+
+// Finds a button by the text it contains rather than a locator recorded against one specific
+// build's widget tree, then taps it (dismissing a coach mark first if one is covering it - see
+// tapDirectThenDismissCoachMark above). Useful when the same logical button's exact widget
+// structure/id shifts between builds but its visible label doesn't.
+//
+// Some apps keep multiple screens mounted simultaneously (e.g. a persistent Stack behind whatever
+// screen is actually showing), so a background screen's InkWell can coincidentally overlap the
+// real on-screen one. Taking the *first* containing InkWell isn't enough either - a large
+// background tile can easily contain a small foreground text's bounds just by being big, and win
+// purely by document order. Among all InkWells that fully contain the text's bounds, this prefers
+// the one with the smallest area - the tightest fit is the real button - and only falls back to
+// "nearest center" if no containing InkWell exists at all.
+async function tapDirectNearTextThenDismissCoachMark(driver, text, {timeoutMs = 5000, intervalMs = 300} = {}) {
+  const textRegex = new RegExp(\`<Text id="[^"]*"[^>]*text="\${text}"[^>]*bounds="\\\\[(-?\\\\d+),(-?\\\\d+)\\\\]\\\\[(-?\\\\d+),(-?\\\\d+)\\\\]"\`);
+  const deadline = Date.now() + timeoutMs;
+  let src;
+  let textMatch;
+  for (;;) {
+    src = await driver.getPageSource();
+    textMatch = src.match(textRegex);
+    if (textMatch) {
+      break;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(\`Could not find "\${text}" text in the current page source\`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  const [tx1, ty1, tx2, ty2] = textMatch.slice(1).map(Number);
+  const tcx = (tx1 + tx2) / 2;
+  const tcy = (ty1 + ty2) / 2;
+
+  const inkwells = [...src.matchAll(/<InkWell id="[^"]*"[^>]*bounds="\\[(-?\\d+),(-?\\d+)\\]\\[(-?\\d+),(-?\\d+)\\]"/g)];
+  const containing = inkwells
+    .map(([, x1, y1, x2, y2], i) => ({i, x1: Number(x1), y1: Number(y1), x2: Number(x2), y2: Number(y2)}))
+    .filter(({x1, y1, x2, y2}) => x1 <= tx1 && y1 <= ty1 && x2 >= tx2 && y2 >= ty2);
+  let index = -1;
+  if (containing.length > 0) {
+    containing.sort((a, b) => (a.x2 - a.x1) * (a.y2 - a.y1) - (b.x2 - b.x1) * (b.y2 - b.y1));
+    index = containing[0].i;
+  } else {
+    index = inkwells.findIndex(([, x1, y1, x2, y2]) => {
+      const cx = (Number(x1) + Number(x2)) / 2;
+      const cy = (Number(y1) + Number(y2)) / 2;
+      return Math.abs(cx - tcx) < 80 && Math.abs(cy - tcy) < 40;
+    });
+  }
+  if (index === -1) {
+    throw new Error(\`Could not find an InkWell near the "\${text}" text\`);
+  }
+
+  // Dismiss the coach mark (if any) by tapping the same InkWell's own measured center - the
+  // widget we just resolved above - rather than a fraction pre-computed against some other
+  // device's screen size at recording time.
+  const [ix1, iy1, ix2, iy2] = inkwells[index].slice(1).map(Number);
+  await tapDirectThenDismissCoachMark(
+    driver,
+    { type: 'tapDirect', foundBy: 'byType', value: \`InkWell#\${index}\` },
+    (ix1 + ix2) / 2,
+    (iy1 + iy2) / 2,
+  );
+}
+
+async function tapAtFraction(driver, xFrac, yFrac) {
+  const rect = await driver.getWindowRect();
+  await driver.action('pointer')
+    .move({ duration: 0, x: Math.round(rect.width * xFrac), y: Math.round(rect.height * yFrac) })
+    .down({ button: 0 })
+    .pause(50)
+    .up({ button: 0 })
+    .perform();
+}
+
+// Elements that don't fit on screen (a list item below the fold, a form field further down a
+// scrollable form) can be missing from getPageSource() entirely, or fail to actually receive
+// enterText even when a locator for them resolves - scroll them into view first.
+async function scrollScreenDown(driver) {
+  const rect = await driver.getWindowRect();
+  await driver.action('pointer')
+    .move({ duration: 0, x: Math.round(rect.width * 0.5), y: Math.round(rect.height * 0.75) })
+    .down({ button: 0 })
+    .pause(50)
+    .move({ duration: 300, x: Math.round(rect.width * 0.5), y: Math.round(rect.height * 0.3) })
+    .up({ button: 0 })
+    .perform();
+  await new Promise((resolve) => setTimeout(resolve, 500));
+}
+
+// Waits out a real-world delay (e.g. an SMS/voice verification call) while logging remaining time
+// periodically, rather than sleeping silently. Pass 'driver' to poll getPageSource() instead of
+// sleeping between log ticks - some apps treat a period with zero driver activity as "idle" and
+// react to it (see waitForPageSourceStable above); omit it to sleep normally.
+async function waitWithProgress(durationMs, message, intervalMs = 10000, driver = null) {
+  const deadline = Date.now() + durationMs;
+  while (Date.now() < deadline) {
+    const remainingSec = Math.ceil((deadline - Date.now()) / 1000);
+    log(\`\${message} (about \${remainingSec}s remaining)\`);
+    const tickDeadline = Math.min(Date.now() + intervalMs, deadline);
+    if (driver) {
+      while (Date.now() < tickDeadline) {
+        await driver.getPageSource();
+      }
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, tickDeadline - Date.now()));
+    }
+  }
+  log(\`\${message} - done\`);
+}
+
+// Taps, then verifies the expected next screen/element actually appeared - if not, retries the tap
+// (up to maxAttempts times) instead of just waiting longer. Necessary whenever a tap can silently
+// fail to have any effect (a stray interstitial covered it, the app was mid-transition, etc.) -
+// simply extending the verification timeout doesn't help there, since nothing is going to change
+// until the tap is repeated.
+async function tapUntilVerified(driver, tapFn, verifyAction, verifyIsDone, verifyErrorMessage, {maxAttempts = 5, verifyTimeoutMs = 5000} = {}) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    await tapFn();
+    try {
+      await retryFlutterAction(driver, verifyAction, verifyIsDone, verifyErrorMessage, {timeoutMs: verifyTimeoutMs, intervalMs: 300});
+      return;
+    } catch (e) {
+      log(\`\${verifyErrorMessage} - not reached after tapping. Retrying (attempt \${attempt}).\`);
+    }
+  }
+  throw new Error(\`Still not reached after \${maxAttempts} attempts: \${verifyErrorMessage}\`);
+}
 
 // Prompts on stdin for a value that must differ on every run (e.g. a patient card number the
 // app-under-test rejects as a duplicate) - see any 'enterText' step below with a comment
 // referencing this.
 async function promptForInput(question) {
+  log(\`[waiting for input] \${question}\`);
   const rl = createInterface({input: process.stdin, output: process.stdout});
   try {
     return await rl.question(\`\${question} \`);
@@ -61,6 +365,7 @@ async function retryFlutterAction(driver, action, isDone, errorMessage, {timeout
       return result;
     }
     if (Date.now() >= deadline) {
+      await dumpPageSourceOnFailure(driver, errorMessage);
       throw new Error(errorMessage);
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -80,7 +385,7 @@ ${this.indent(code, 2)}
   await driver.deleteSession();
 }
 
-main().catch(console.log);`;
+main().catch((e) => log(e.stack || e.message || e));`;
   }
 
   addComment(comment) {
