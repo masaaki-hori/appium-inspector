@@ -113,5 +113,14 @@
   "allowScripts": {
     "electron": true
   },
+  "appium": {
+    "pluginName": "inspector",
+    "automationName": "Inspector",
+    "platformNames": [
+      "iOS",
+      "Android"
+    ],
+    "mainClass": "FlutterInspector"
+  },
   "desktopName": "io.appium.inspector"
 }
