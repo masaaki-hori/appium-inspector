@@ -2,8 +2,8 @@ import {Divider, Space} from 'antd';
 
 import {openLink} from '../../../polyfills.js';
 import ContextControlsGroup from './ContextControlsGroup.jsx';
-import DeviceControlsGroup from './DeviceControlsGroup.jsx';
-import DisplayControlsGroup from './DisplayControlsGroup.jsx';
+import DeviceControlsGroup from './DeviceControls/DeviceControlsGroup.jsx';
+import DriverControlsGroup from './DriverControls/DriverControlsGroup.jsx';
 import GeneralControlsGroup from './GeneralControlsGroup.jsx';
 import SessionQuitControlsGroup from './SessionQuitControlsGroup.jsx';
 import SessionReloadButton from './SessionReloadButton.jsx';
@@ -20,17 +20,13 @@ const HeaderButtons = (props) => {
     showSiriCommandModal,
     applyClientMethod,
     quitSessionAndReturn,
-    driver,
     contexts,
     currentContext,
     setContext,
     autoSessionRestart,
     toggleAutoSessionRestart,
-    toggleMultiDisplayMode,
-    displays,
-    setCurrentDisplayId,
-    currentDisplayId,
-    automationName,
+    featureCaps,
+    sessionSettings,
     siriCommandValue,
     setSiriCommandValue,
     isSiriCommandModalVisible,
@@ -41,7 +37,7 @@ const HeaderButtons = (props) => {
     <div className={styles.headerButtons}>
       <Space size="middle" wrap className={styles.headerButtonsSpace}>
         <DeviceControlsGroup
-          driver={driver}
+          featureCaps={featureCaps}
           applyClientMethod={applyClientMethod}
           showSiriCommandModal={showSiriCommandModal}
           siriCommandValue={siriCommandValue}
@@ -49,12 +45,10 @@ const HeaderButtons = (props) => {
           isSiriCommandModalVisible={isSiriCommandModalVisible}
           hideSiriCommandModal={hideSiriCommandModal}
         />
-        <DisplayControlsGroup
-          automationName={automationName}
-          displays={displays}
-          currentDisplayId={currentDisplayId}
-          setCurrentDisplayId={setCurrentDisplayId}
-          toggleMultiDisplayMode={toggleMultiDisplayMode}
+        <DriverControlsGroup
+          featureCaps={featureCaps}
+          sessionSettings={sessionSettings}
+          applyClientMethod={applyClientMethod}
         />
         <ContextControlsGroup
           selectAppMode={selectAppMode}

@@ -1,6 +1,7 @@
-import {Tabs} from 'antd';
+import {Tabs, Tooltip} from 'antd';
 import {useTranslation} from 'react-i18next';
 
+import {PLATFORMS_WITHOUT_W3C_ACTIONS} from '../../constants/common.js';
 import {INSPECTOR_TABS} from '../../constants/session-inspector.js';
 import Commands from './CommandsTab/Commands.jsx';
 import GestureEditor from './GesturesTab/GestureEditor/GestureEditor.jsx';
@@ -15,9 +16,20 @@ import styles from './SessionInspector.module.css';
  * Tabs shown to the right of the screenshot on the Session Inspector screen.
  */
 const SessionInspectorTabs = (props) => {
-  const {selectedInspectorTab, selectInspectorTab, isGestureEditorVisible, showScreenshot} = props;
+  const {
+    selectedInspectorTab,
+    selectInspectorTab,
+    isGestureEditorVisible,
+    showScreenshot,
+    applyClientMethod,
+    getSupportedSessionMethods,
+    featureCaps,
+  } = props;
 
   const {t} = useTranslation();
+
+  // Disable the Gestures tab on unsupported platforms
+  const areW3CActionsUnsupported = PLATFORMS_WITHOUT_W3C_ACTIONS.includes(featureCaps.platformName);
 
   const inspectorTabItems = [
     {
@@ -30,12 +42,20 @@ const SessionInspectorTabs = (props) => {
       label: t('Commands'),
       key: INSPECTOR_TABS.COMMANDS,
       disabled: !showScreenshot,
-      children: <Commands {...props} />,
+      children: (
+        <Commands applyClientMethod={applyClientMethod} getSupportedSessionMethods={getSupportedSessionMethods} />
+      ),
     },
     {
-      label: t('Gestures'),
+      label: areW3CActionsUnsupported ? (
+        <Tooltip title={t('w3cActionsUnsupported')} placement="bottom">
+          {t('Gestures')}
+        </Tooltip>
+      ) : (
+        t('Gestures')
+      ),
       key: INSPECTOR_TABS.GESTURES,
-      disabled: !showScreenshot,
+      disabled: areW3CActionsUnsupported || !showScreenshot,
       children: isGestureEditorVisible ? <GestureEditor {...props} /> : <SavedGestures {...props} />,
     },
     {
