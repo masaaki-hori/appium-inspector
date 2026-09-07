@@ -12,7 +12,6 @@ import {
   UNKNOWN_ERROR,
 } from '../constants/session-inspector.js';
 import {COMMAND_EXECUTE_SCRIPT, COMMAND_UPDATE_SETTINGS} from '../constants/commands.js';
-import {APP_MODE, NATIVE_APP, UNKNOWN_ERROR} from '../constants/session-inspector.js';
 import i18n from '../i18next.js';
 import InspectorDriver from '../lib/appium/inspector-driver.js';
 import {CLIENT_FRAMEWORK_MAP} from '../lib/client-frameworks/map.js';
