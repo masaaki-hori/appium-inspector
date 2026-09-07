@@ -46,10 +46,8 @@ import {
   SET_CONTEXT,
   SET_COORD_END,
   SET_COORD_START,
-  SET_CURRENT_DISPLAY_ID,
   SET_EXPANDED_PATHS,
   SET_FLAT_SESSION_CAPS,
-  SET_FOUND_DISPLAYS,
   SET_GESTURE_TAP_COORDS_MODE,
   SET_INTERACTIONS_NOT_AVAILABLE,
   SET_KEEP_ALIVE_INTERVAL,
@@ -89,7 +87,6 @@ import {omit} from '../utils/common.js';
 const INITIAL_STATE = {
   savedGestures: [],
   driver: null,
-  automationName: null,
   keepAliveInterval: null,
   showKeepAlivePrompt: false,
   userWaitTimeout: null,
@@ -102,6 +99,7 @@ const INITIAL_STATE = {
   clientFramework: CLIENT_FRAMEWORKS.JAVA_JUNIT4,
   serverDetails: {},
   sessionCaps: {},
+  featureCaps: {},
   sessionSettings: {},
   isGestureEditorVisible: false,
   isLocatorSearchModalVisible: false,
@@ -306,13 +304,12 @@ export default function inspector(state = INITIAL_STATE, action) {
       return {...state, showBoilerplate: action.show};
 
     case SET_SESSION_DETAILS: {
-      const automationName = action.driver.capabilities.automationName;
       return {
         ...state,
         serverDetails: action.serverDetails,
         driver: action.driver,
         sessionCaps: action.sessionCaps,
-        automationName: automationName && automationName.toLowerCase(),
+        featureCaps: action.featureCaps,
         appMode: action.appMode,
         isUsingMjpegMode: action.isUsingMjpegMode,
       };
@@ -352,18 +349,6 @@ export default function inspector(state = INITIAL_STATE, action) {
       return {
         ...state,
         siriCommandValue: action.siriCommandValue,
-      };
-
-    case SET_FOUND_DISPLAYS:
-      return {
-        ...state,
-        displays: action.displays,
-      };
-
-    case SET_CURRENT_DISPLAY_ID:
-      return {
-        ...state,
-        currentDisplayId: action.displayId,
       };
 
     case SET_LOCATOR_SEARCH_STRATEGY:
