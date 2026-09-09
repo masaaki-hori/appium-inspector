@@ -61,7 +61,7 @@ const ScreenshotImgWithOverlays = (props) => {
     selectedInspectorTab,
     applyClientMethod,
     sourceJSON,
-    automationName,
+    featureCaps,
     tapAtCoordinates,
     tapElementAtCoordinates,
     tapDirectElementAtCoordinates,
@@ -141,7 +141,8 @@ const ScreenshotImgWithOverlays = (props) => {
   // The right-click menu (Flutter driver sessions only) is only meaningful while tracking a
   // tap/swipe coordinate, since its actions rely on rightClickCoordsRef being populated by
   // handleScreenshotContextMenu below
-  const canUseFlutterContextMenu = automationName === DRIVERS.FLUTTER && screenshotInteractionMode === TAP_SWIPE;
+  const canUseFlutterContextMenu =
+    featureCaps.automationName === DRIVERS.FLUTTER && screenshotInteractionMode === TAP_SWIPE;
 
   const handleScreenshotContextMenu = (e) => {
     if (!canUseFlutterContextMenu) {

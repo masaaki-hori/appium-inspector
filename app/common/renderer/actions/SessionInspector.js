@@ -1,6 +1,7 @@
 import sanitize from 'sanitize-filename';
 
 import {SAVED_CLIENT_FRAMEWORK, SET_SAVED_GESTURES} from '../../shared/setting-defs.js';
+import {COMMAND_EXECUTE_SCRIPT, COMMAND_UPDATE_SETTINGS} from '../constants/commands.js';
 import {DRIVERS} from '../constants/common.js';
 import {POINTER_TYPES} from '../constants/gestures.js';
 import {DEFAULT_TAP, SCREENSHOT_INTERACTION_MODE} from '../constants/screenshot.js';
@@ -11,7 +12,6 @@ import {
   SCREENSHOT_SCALE_REFRESH_EVENT,
   UNKNOWN_ERROR,
 } from '../constants/session-inspector.js';
-import {COMMAND_EXECUTE_SCRIPT, COMMAND_UPDATE_SETTINGS} from '../constants/commands.js';
 import i18n from '../i18next.js';
 import InspectorDriver from '../lib/appium/inspector-driver.js';
 import {CLIENT_FRAMEWORK_MAP} from '../lib/client-frameworks/map.js';
@@ -328,8 +328,8 @@ export function applyClientMethod(params) {
  */
 export function tapAtCoordinates(x, y) {
   return async (dispatch, getState) => {
-    const {automationName} = getState().inspector;
-    if (automationName === DRIVERS.FLUTTER) {
+    const {featureCaps} = getState().inspector;
+    if (featureCaps.automationName === DRIVERS.FLUTTER) {
       return await tapFlutterWidgetAtCoordinates(x, y)(dispatch, getState);
     }
 
@@ -338,7 +338,7 @@ export function tapAtCoordinates(x, y) {
     const targetElement = findElementAtPoint(sourceJSON, x, y);
 
     if (targetElement) {
-      const strategyMap = getSuggestedLocators(targetElement, sourceXML, isNative, automationName);
+      const strategyMap = getSuggestedLocators(targetElement, sourceXML, isNative, featureCaps.automationName);
       for (const [strategy, selector] of strategyMap) {
         const findAction = callClientMethod({strategy, selector});
         const {elementId} = await findAction(dispatch, getState);
@@ -771,10 +771,10 @@ export function setRefreshingState(refreshStates) {
 
 export function selectAppMode(mode) {
   return async (dispatch, getState) => {
-    const {appMode, automationName} = getState().inspector;
+    const {appMode, featureCaps} = getState().inspector;
     dispatch({type: SET_APP_MODE, mode});
     if (appMode !== mode && mode === APP_MODE.WEB_HYBRID) {
-      if (automationName === DRIVERS.FLUTTER) {
+      if (featureCaps.automationName === DRIVERS.FLUTTER) {
         // A Flutter driver session has no real WebView-hybrid concept to search for - this
         // button is repurposed as "leave the native OS layer switched to by NATIVE app mode
         // below, and resume driving the Flutter widget tree", so just switch back to the
