@@ -45,6 +45,8 @@ const handleSwipeOnScreenshot = async (swipeStartPoint, swipeEndPoint, applyClie
 const ScreenshotImgWithOverlays = (props) => {
   const {
     screenshot,
+    imageElRef,
+    windowSize,
     serverDetails,
     isUsingMjpegMode,
     methodCallInProgress,
@@ -301,7 +303,7 @@ const ScreenshotImgWithOverlays = (props) => {
 
   // Used when creating a gesture and clicking on screenshot to set move coordinates
   const handleScreenshotClick = async () => {
-    if (selectedTick) {
+    if (selectedTick && x && y) {
       await tapTickCoordinates(x, y);
     }
   };
@@ -313,7 +315,7 @@ const ScreenshotImgWithOverlays = (props) => {
     if (e.button !== 0) {
       return;
     }
-    if (screenshotInteractionMode === TAP_SWIPE) {
+    if (screenshotInteractionMode === TAP_SWIPE && x && y) {
       await setCoordStart(x, y);
     }
   };
@@ -326,7 +328,7 @@ const ScreenshotImgWithOverlays = (props) => {
     if (e.button !== 0) {
       return;
     }
-    if (screenshotInteractionMode !== TAP_SWIPE || !coordStart) {
+    if (screenshotInteractionMode !== TAP_SWIPE || !coordStart?.x || !coordStart?.y || !x || !y) {
       return;
     }
     await setCoordEnd(x, y);
@@ -342,12 +344,17 @@ const ScreenshotImgWithOverlays = (props) => {
     await clearCoordAction();
   };
 
-  const handleScreenshotCoordsUpdate = (e) => {
+  const handleScreenshotCoordsUpdate = async (e) => {
     if (screenshotInteractionMode !== SELECT && screenshotInteractionMode !== TAP_ELEMENT) {
       const offsetX = e.nativeEvent.offsetX;
       const offsetY = e.nativeEvent.offsetY;
       const newX = offsetX * scaleRatio;
       const newY = offsetY * scaleRatio;
+      // screenshot container can exceed the screenshot bounds,
+      // so ignore coordinates outside the screenshot bounds
+      if (newX > windowSize.width || newY > windowSize.height) {
+        return await handleScreenshotLeave();
+      }
       setX(Math.round(newX));
       setY(Math.round(newY));
     }
@@ -385,7 +392,7 @@ const ScreenshotImgWithOverlays = (props) => {
           {screenshotInteractionMode !== SELECT && screenshotInteractionMode !== TAP_ELEMENT && (
             <CoordinatesContainer x={x} y={y} />
           )}
-          <img src={screenSrc} id="screenshot" />
+          <img src={screenSrc} id="screenshot" ref={imageElRef} />
           {(screenshotInteractionMode === SELECT || screenshotInteractionMode === TAP_ELEMENT) && (
             <ElementOverlays {...props} />
           )}

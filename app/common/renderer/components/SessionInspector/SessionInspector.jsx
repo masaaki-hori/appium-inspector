@@ -1,7 +1,11 @@
-import {useCallback, useEffect, useRef} from 'react';
-import {useTranslation} from 'react-i18next';
+import {bindActionCreators} from '@reduxjs/toolkit';
+import {Splitter} from 'antd';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {shallowEqual, useDispatch, useSelector} from 'react-redux';
 import {useNavigate} from 'react-router';
+import {useTranslation} from 'react-i18next';
 
+import * as SessionInspectorActions from '../../actions/SessionInspector.js';
 import {WINDOW_DIMENSIONS} from '../../constants/common.js';
 import {AUTO_REFRESH_INTERVAL, SESSION_EXPIRY_PROMPT_TIMEOUT} from '../../constants/session-inspector.js';
 import HeaderButtons from './Header/HeaderButtons.jsx';
@@ -10,6 +14,8 @@ import SessionExpiryModal from './SessionExpiryModal.jsx';
 import SessionInspectorTabs from './SessionInspectorTabs.jsx';
 
 import styles from './SessionInspector.module.css';
+
+const MAX_SCREENSHOT_WIDTH_PERCENT = `${WINDOW_DIMENSIONS.MAX_SCREENSHOT_PANEL_WIDTH_FRACTION * 100}%`;
 
 // resize width to something sensible for using the inspector on first run
 const resizeWindowOnLaunch = () => {
@@ -25,7 +31,12 @@ const resizeWindowOnLaunch = () => {
 /**
  * The root component of the Session Inspector screen.
  */
-const Inspector = (props) => {
+const Inspector = () => {
+  const inspector = useSelector((state) => state.inspector, shallowEqual);
+  const dispatch = useDispatch();
+  const actions = useMemo(() => bindActionCreators(SessionInspectorActions, dispatch), [dispatch]);
+  const props = {...inspector, ...actions};
+
   const {
     screenshot,
     isUsingMjpegMode,
@@ -70,6 +81,29 @@ const Inspector = (props) => {
   // the right-click context menu/modal state that lives inside <Screenshot>. The error, if any,
   // still renders alongside the (now possibly stale) screenshot - see Screenshot.jsx's JSX.
   const showScreenshot = !!screenshot || (isUsingMjpegMode && (!isSourceRefreshOn || !isAwaitingMjpegStream));
+
+  const [screenshotPanelWidth, setScreenshotPanelWidth] = useState(WINDOW_DIMENSIONS.INITIAL_SCREENSHOT_PANEL_WIDTH_PX);
+  const screenshotPanelResizedManually = useRef(false);
+
+  // Triggered when the width of the scaled image or Inspector window changes.
+  const setPanelWidthAutomatically = (suggestedWidth) => {
+    setScreenshotPanelWidth((curWidth) => {
+      if (screenshotPanelResizedManually.current) {
+        // re-enforce the same limits that are already set for Splitter.Panel,
+        // otherwise the panel can go outside these bounds upon Inspector window size change
+        const maxPanelSize = window.innerWidth * WINDOW_DIMENSIONS.MAX_SCREENSHOT_PANEL_WIDTH_FRACTION;
+        return Math.min(Math.max(curWidth, WINDOW_DIMENSIONS.MIN_IMG_WIDTH_PX), maxPanelSize);
+      }
+      // ignore sub-pixel differences to avoid a resizing loop
+      return Math.abs(suggestedWidth - curWidth) < 1 ? curWidth : suggestedWidth;
+    });
+  };
+
+  // Triggered when manually adjusting the splitter. Only needed to trip the manual resize flag.
+  const setPanelWidthManually = (widths) => {
+    screenshotPanelResizedManually.current = true;
+    setScreenshotPanelWidth(widths[0]);
+  };
 
   const quitSessionAndReturn = useCallback(
     async ({reason, manualQuit = true, detachOnly = false} = {}) => {
@@ -141,6 +175,23 @@ const Inspector = (props) => {
         />
         <SessionInspectorTabs {...props} showScreenshot={showScreenshot} />
       </div>
+      <Splitter className={styles.inspectorSplitter} onResize={setPanelWidthManually}>
+        <Splitter.Panel
+          min={WINDOW_DIMENSIONS.MIN_IMG_WIDTH_PX}
+          max={MAX_SCREENSHOT_WIDTH_PERCENT}
+          size={screenshotPanelWidth}
+        >
+          <Screenshot
+            {...props}
+            showScreenshot={showScreenshot}
+            screenshotPanelWidth={screenshotPanelWidth}
+            suggestScreenshotPanelWidth={setPanelWidthAutomatically}
+          />
+        </Splitter.Panel>
+        <Splitter.Panel>
+          <SessionInspectorTabs {...props} showScreenshot={showScreenshot} />
+        </Splitter.Panel>
+      </Splitter>
       <SessionExpiryModal
         showKeepAlivePrompt={showKeepAlivePrompt}
         keepSessionAlive={keepSessionAlive}

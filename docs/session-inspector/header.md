@@ -2,15 +2,15 @@
 title: Header
 ---
 
-The header of the Session Inspector contains various buttons that are key to interacting with the
+The header of the Session Inspector contains various items that are key to interacting with the
 device itself, or the [application source](./source.md).
 
 ![Inspector Header](./assets/images/header/app-header.png)
 
-## Device System Buttons
+## Device System Controls
 
-If using the Inspector with the XCUITest, UiAutomator2 or Espresso drivers, the first button group
-in the header provides functionality specific to the device under test. The available buttons
+If using the Inspector with the XCUITest, UiAutomator2 or Espresso drivers, the first item group
+in the header provides functionality specific to the device under test. The available items
 generally correspond to a hardware button on an Android, iOS, iPadOS, tvOS or watchOS device:
 
 ![Android Buttons](./assets/images/header/system-buttons-android.png) ![XCUITest Buttons](./assets/images/header/system-buttons-xcuitest.png)
@@ -22,13 +22,15 @@ generally correspond to a hardware button on an Android, iOS, iPadOS, tvOS or wa
       execute method. The Inspector filters these only by the device category and OS version.
     - The Siri button will open a prompt for input text, which will be used as the Siri command.
       Please note that the command will not work if Siri is disabled.
-- watchOS: buttons dropdown / gestures dropdown / Siri
+- watchOS: buttons dropdown / Digital Crown rotation / gestures dropdown / Siri
+    - Digital Crown rotation is based on the XCUITest driver's 
+      [`mobile: rotateDigitalCrown`](https://appium.github.io/appium-xcuitest-driver/latest/reference/execute-methods/#mobile-rotatedigitalcrown) execute method
     - Gestures listed in the dropdown correspond to values supported by the XCUITest driver's
       [`mobile: performHandGesture`](https://appium.github.io/appium-xcuitest-driver/latest/reference/execute-methods/#mobile-performhandgesture) execute method
 
 ## Driver-Specific Controls
 
-Certain header buttons correspond to driver-specific functionality, and are only shown in a session
+Certain header items correspond to driver-specific functionality, and are only shown in a session
 for that driver.
 
 ### Display Switcher
@@ -53,6 +55,33 @@ and MJPEG screenshot stream).
 
 Pressing the multi-display button while multi-display mode is active will switch to the default
 display and hide the dropdown.
+
+### Window Switcher
+
+!!! note
+
+    This functionality is only supported for the UiAutomator2 driver.
+
+![Window Switcher Button](./assets/images/header/window-switcher-button.png)
+
+The window switcher allows changing the strategy for determining the active application window.
+Pressing the button will reveal a new dropdown with 3 options.
+
+![Window Switcher Dropdown](./assets/images/header/window-switcher-dropdown.png)
+
+- Focused Window: the default strategy used by the driver
+- Top-Most Window: this strategy selects the window with the highest Z-order as the active one. The
+  top-most window is often the same as the focused window, but may be different for multi-window
+  apps, or devices with multiple displays. This strategy corresponds to the
+  `enableTopmostWindowFromActivePackage` driver setting being set to `true`.
+- All Windows: this strategy includes all accessible windows in the page source. It corresponds to the
+  `enableMultiWindows` driver setting being set to `true`.
+
+Refer to the [UiAutomator2 Multi-Window Testing guide](https://github.com/appium/appium-uiautomator2-driver/blob/master/docs/android-multiwindow.md)
+for more information.
+
+Pressing the window switcher button while the dropdown is visible will revert to the default
+focused window strategy and hide the dropdown.
 
 ### Subdriver Buttons
 
@@ -137,13 +166,13 @@ list of selectable element IDs:
 
 ![Element Search Results](./assets/images/header/search-results.png)
 
-Selecting any element enables the element action buttons:
+Selecting any element enables the element action items:
 
-| Icon                                                                                     | Description                                                                                                         |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| ![Reveal Element in Source](./assets/images/header/search-reveal-element.png)            | Attempt to select the element in the application source. Note that this may not work if the element ID has changed. |
-| ![Tap Element](./assets/images/header/search-tap-element.png)                            | Tap the element                                                                                                     |
-| ![Send or Clear Element Text](./assets/images/header/search-send-clear-element-text.png) | Enter text to send to the element, or clear its text                                                                |
+| Item | Description |
+| --- | --- |
+| ![Reveal Element in Source](./assets/images/header/search-reveal-element.png) | Attempt to select the element in the application source. Note that this may not work if the element ID has changed. |
+| ![Tap Element](./assets/images/header/search-tap-element.png) | Tap the element |
+| ![Send or Clear Element Text](./assets/images/header/search-send-clear-element-text.png) | Enter text to send to the element, or clear its text |
 
 ## Toggle Recorder
 
@@ -156,7 +185,7 @@ Interactions that can be recorded include:
 
 - Actions for a specific element (tap/send keys/clear)
 - Generic tap/swipe actions on the application screenshot
-- [Mobile device system actions](#device-system-buttons)
+- [Mobile device system actions](#device-system-controls)
 - [Driver commands](./commands.md)
 
 !!! note
