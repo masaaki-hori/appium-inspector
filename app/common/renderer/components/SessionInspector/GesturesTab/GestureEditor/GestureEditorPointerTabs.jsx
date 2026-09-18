@@ -128,11 +128,13 @@ const GestureEditorPointerTabs = ({
   return (
     <Tabs
       type="editable-card"
+      styles={{root: {flex: 1, overflowY: 'auto'}, content: {padding: '2px 0px', overflowY: 'scroll'}}}
       onChange={(pointerId) => setActivePointerId(pointerId)}
       activeKey={activePointerId}
       onEdit={addOrRemovePointer}
       hideAdd={pointers.length === 5}
       centered={true}
+      destroyOnHidden={true}
       tabBarGutter={10}
       items={pointerTabs}
     />

@@ -54,15 +54,14 @@
   text-align: center;
 }
 
-.tickCard :global(.ant-card-head) {
-  min-height: unset;
-  padding: 0px;
-  border-bottom: none;
+.tickCardDropTarget {
+  outline: 2px solid var(--ant-color-primary);
 }
 
-.tickCard :global(.ant-card-body) {
-  padding-top: 6px;
-  height: calc(100% - 25px);
+.tickDragHandle {
+  margin-top: 3px;
+  cursor: grab;
+  touch-action: none;
 }
 
 .tickPlusBtnWrapper {
