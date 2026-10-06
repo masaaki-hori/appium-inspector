@@ -69,7 +69,7 @@ async function waitForPageSourceStable(driver, {timeoutMs = 3000} = {}) {
 // Only app-independent helpers belong in this boilerplate (the generated code itself only calls
 // log, dumpPageSourceOnFailure, retryFlutterAction and promptForInput). Operations specific to one
 // app - dismissing its coach marks, finding its back icon or consent button by position, etc. -
-// belong in that project's own helper module (for the app under test: test/appium/qa-test-helpers.js).
+// belong in that project's own test helper module.
 
 async function tapAtFraction(driver, xFrac, yFrac) {
   const rect = await driver.getWindowRect();

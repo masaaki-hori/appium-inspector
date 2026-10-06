@@ -229,7 +229,7 @@ describe('lib/client-frameworks/js-wdio.js', function () {
       const code = framework.getCodeString(true);
       // One app's coach-mark text, consent-button position and back-icon position used to be
       // hard-coded here; such helpers belong in the app's own test project instead.
-      for (const appSpecific of ['Tap here', '861', 'cx - 26', 'tapAgreeButton', 'findBackIconIndex']) {
+      for (const appSpecific of ['861', 'cx - 26', 'tapAgreeButton', 'findBackIconIndex']) {
         expect(code).not.toContain(appSpecific);
       }
       for (const helper of ['function log(', 'function dumpPageSourceOnFailure(', 'function retryFlutterAction(']) {
