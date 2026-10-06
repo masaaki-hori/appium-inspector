@@ -222,6 +222,21 @@ describe('lib/client-frameworks/js-wdio.js', function () {
       expect(code).toContain('const el2 = await promptForInput(');
     });
 
+    it('should keep app-specific helpers out of the boilerplate', function () {
+      const serverUrlParts = {protocol: 'http', host: 'localhost', port: 4723, path: '/'};
+      const framework = new JsWdIoFramework('http://localhost:4723', serverUrlParts, {});
+      framework.actions = [];
+      const code = framework.getCodeString(true);
+      // One app's coach-mark text, consent-button position and back-icon position used to be
+      // hard-coded here; such helpers belong in the app's own test project instead.
+      for (const appSpecific of ['Tap here', '861', 'cx - 26', 'tapAgreeButton', 'findBackIconIndex']) {
+        expect(code).not.toContain(appSpecific);
+      }
+      for (const helper of ['function log(', 'function dumpPageSourceOnFailure(', 'function retryFlutterAction(']) {
+        expect(code).toContain(helper);
+      }
+    });
+
     it('should include the promptForInput helper in the boilerplate', function () {
       const serverUrlParts = {protocol: 'http', host: 'localhost', port: 4723, path: '/'};
       const framework = new JsWdIoFramework('http://localhost:4723', serverUrlParts, {});
