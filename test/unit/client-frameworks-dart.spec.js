@@ -204,6 +204,8 @@ describe('lib/client-frameworks/dart-*.js', function () {
       ['byText', 'Submit', 'find.text("Submit")'],
       ['byType', 'ElevatedButton', 'find.byType(ElevatedButton)'],
       ['byType', 'Icon#3', 'find.byType(Icon).at(3)'],
+      ['byFieldLabel', 'TextFormField|姓', 'find.widgetWithText(TextFormField, "姓")'],
+      ['byFieldLabel', 'TextField|Email', 'find.widgetWithText(TextField, "Email")'],
     ])('should map %s to the matching Finder expression', (foundBy, value, expected) => {
       const framework = new DartIntegrationTestFramework();
       expect(framework.getFlutterFinderExpression({foundBy, value})).toBe(expected);

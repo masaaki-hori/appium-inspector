@@ -146,6 +146,24 @@ describe('lib/client-frameworks/js-wdio.js', function () {
       expect(code).toContain('"text":"hello@example.com"');
     });
 
+    it('should pass a byFieldLabel locator through to the device unchanged', function () {
+      const framework = new JsWdIoFramework();
+      framework.actions = [
+        {
+          action: 'enterText',
+          params: [
+            undefined,
+            undefined,
+            ENTER_TEXT_POINTER_ACTIONS,
+            {foundBy: 'byFieldLabel', value: 'TextFormField|姓'},
+          ],
+        },
+      ];
+      const code = framework.getCodeString();
+      expect(code).toContain('"foundBy":"byFieldLabel"');
+      expect(code).toContain('"value":"TextFormField|姓"');
+    });
+
     it('should comment out entering text when no Flutter finder was resolved', function () {
       const framework = new JsWdIoFramework();
       framework.actions = [{action: 'enterText', params: [undefined, undefined, ENTER_TEXT_POINTER_ACTIONS]}];

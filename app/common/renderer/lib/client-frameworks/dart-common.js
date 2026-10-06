@@ -48,6 +48,18 @@ export default class DartFlutterFramework extends CommonClientFramework {
         return `find.byKey(const Key(${JSON.stringify(value)}))`;
       case 'byText':
         return `find.text(${JSON.stringify(value)})`;
+      case 'byFieldLabel': {
+        // 'value' is '<Type>|<label>': a key-less TextField/TextFormField identified by its own
+        // InputDecoration labelText/hintText (appium_handler.dart only records this when exactly
+        // one field on screen carries that wording). 'find.widgetWithText' matches the label/hint
+        // as *rendered* text, so a field labeled only by a hintText can't be found this way once
+        // text has been entered into it (the hint is no longer drawn) - unlike JS replay, which
+        // resolves this locator on the device from the field's configuration instead.
+        const separator = value.indexOf('|');
+        const type = value.slice(0, separator);
+        const label = value.slice(separator + 1);
+        return `find.widgetWithText(${type}, ${JSON.stringify(label)})`;
+      }
       case 'byType': {
         // 'value' is the widget's Dart runtime type name, used here as a bare identifier -
         // optionally suffixed with '#<index>' (appium_handler.dart's 'ByTypeIndex' finder) when

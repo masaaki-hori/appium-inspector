@@ -142,17 +142,15 @@ const Screenshot = (props) => {
   return (
     <div id="screenshotContainer" className={styles.screenshotContainer}>
       <ScreenshotControls {...props} />
-      {showScreenshot && (
-        <ScreenshotImgWithOverlays
-          {...props}
-          scaleRatio={scaleRatio}
-          onContextMenuActiveChange={onContextMenuActiveChange}
-        />
-      )}
-      {screenshotError && <ScreenshotErrorLabel screenshotError={screenshotError} />}
-      {!showScreenshot && <ScreenshotOuterSpinner />}
       <div className={styles.screenshotContent} ref={screenshotContentElRef}>
-        {showScreenshot && <ScreenshotImgWithOverlays {...props} scaleRatio={scaleRatio} imageElRef={imageElRef} />}
+        {showScreenshot && (
+          <ScreenshotImgWithOverlays
+            {...props}
+            scaleRatio={scaleRatio}
+            imageElRef={imageElRef}
+            onContextMenuActiveChange={onContextMenuActiveChange}
+          />
+        )}
         {screenshotError && <ScreenshotErrorLabel screenshotError={screenshotError} />}
         {!showScreenshot && <ScreenshotOuterSpinner />}
       </div>

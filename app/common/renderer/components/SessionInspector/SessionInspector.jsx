@@ -155,14 +155,6 @@ const Inspector = () => {
   return (
     <div className={styles.inspectorContainer}>
       <HeaderButtons {...props} quitSessionAndReturn={quitSessionAndReturn} />
-      <div className={styles.inspectorMain}>
-        <Screenshot
-          {...props}
-          showScreenshot={showScreenshot}
-          onContextMenuActiveChange={handleContextMenuActiveChange}
-        />
-        <SessionInspectorTabs {...props} showScreenshot={showScreenshot} />
-      </div>
       <Splitter className={styles.inspectorSplitter} onResize={setPanelWidthManually}>
         <Splitter.Panel
           min={WINDOW_DIMENSIONS.MIN_IMG_WIDTH_PX}
@@ -174,6 +166,7 @@ const Inspector = () => {
             showScreenshot={showScreenshot}
             screenshotPanelWidth={screenshotPanelWidth}
             suggestScreenshotPanelWidth={setPanelWidthAutomatically}
+            onContextMenuActiveChange={handleContextMenuActiveChange}
           />
         </Splitter.Panel>
         <Splitter.Panel>
