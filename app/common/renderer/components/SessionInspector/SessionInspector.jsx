@@ -9,6 +9,7 @@ import * as SessionInspectorActions from '../../actions/SessionInspector.js';
 import {WINDOW_DIMENSIONS} from '../../constants/common.js';
 import {AUTO_REFRESH_INTERVAL, SESSION_EXPIRY_PROMPT_TIMEOUT} from '../../constants/session-inspector.js';
 import HeaderButtons from './Header/HeaderButtons.jsx';
+import InspectorShortcuts from './InspectorShortcuts.jsx';
 import Screenshot from './Screenshot/Screenshot.jsx';
 import SessionExpiryModal from './SessionExpiryModal.jsx';
 import SessionInspectorTabs from './SessionInspectorTabs.jsx';
@@ -41,6 +42,10 @@ const Inspector = () => {
     setSessionTime,
     storeSessionSettings,
     methodCallInProgress,
+    showLocatorSearchModal,
+    isRecording,
+    startRecording,
+    pauseRecording,
   } = props;
 
   const autoRefreshIntervalRef = useRef(null);
@@ -153,7 +158,13 @@ const Inspector = () => {
   }, [quitSessionAndReturn, setUserWaitTimeout, showKeepAlivePrompt, t]);
 
   return (
-    <div className={styles.inspectorContainer}>
+    <InspectorShortcuts
+      applyClientMethod={applyClientMethod}
+      showLocatorSearchModal={showLocatorSearchModal}
+      isRecording={isRecording}
+      startRecording={startRecording}
+      pauseRecording={pauseRecording}
+    >
       <HeaderButtons {...props} quitSessionAndReturn={quitSessionAndReturn} />
       <Splitter className={styles.inspectorSplitter} onResize={setPanelWidthManually}>
         <Splitter.Panel
@@ -179,7 +190,7 @@ const Inspector = () => {
         quitSessionAndReturn={quitSessionAndReturn}
         setUserWaitTimeout={setUserWaitTimeout}
       />
-    </div>
+    </InspectorShortcuts>
   );
 };
 
