@@ -174,3 +174,7 @@
   max-height: calc(100vh - 16px);
   overflow-y: auto;
 }
+
+.screenshotImg {
+  user-select: none;
+}
