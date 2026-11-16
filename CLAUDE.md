@@ -104,11 +104,14 @@ Upstream is merged in regularly. Upstream changes can break Flutter features **w
 1. Grep for the Flutter call sites listed above and confirm they still read the right state/props (including `onContextMenuActiveChange` reaching `ScreenshotImgWithOverlays`).
 2. `npm run test`.
 3. Check the fork-changed `.jsx` files for components rendered more than once and for `styles.xxx` classes missing from their `.module.css` (both signs of a stale block). Requires the `upstream` remote (`git fetch upstream`). Expected output today: only the three Modals/Inputs in `ScreenshotImgWithOverlays.jsx` and the two `Splitter.Panel`s in `SessionInspector.jsx`.
+   Run it with bash: zsh does not split the unquoted `$jsx`, so both loops see one bogus filename and print nothing, which looks like a clean result.
    ```bash
+   bash <<'SH'
    jsx=$(git diff --name-only upstream/main...main -- '*.jsx')
    # components rendered more than once (comment lines excluded)
    for f in $jsx; do [ -f "$f" ] && grep -v -E '^\s*(//|\*|/\*)' "$f" | grep -o "<[A-Z][A-Za-z.]*" | sort | uniq -c | awk -v f="$f" '$1>1 {print f": "$2" x"$1}'; done
    # styles.xxx missing from the matching .module.css
    for f in $jsx; do css="${f%.jsx}.module.css"; [ -f "$css" ] || continue; for c in $(grep -o 'styles\.[A-Za-z0-9_]*' "$f" | sed 's/styles\.//' | sort -u); do grep -q "\.$c\b" "$css" || echo "$f: styles.$c not in $(basename "$css")"; done; done
+   SH
    ```
 4. `npm run build:plugin`, hard-reload the browser, open a Flutter session and check: one screenshot (`document.querySelectorAll('#screenshot').length === 1` in DevTools), highlights line up with widgets, the right-click menu lists overlapping candidates, and a recorded tap produces a widget locator.
